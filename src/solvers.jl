@@ -30,9 +30,7 @@ function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
         k = Int(ceil(log(dim)))
     end
 
-    r = 2*k
-
-    return LanczosFA(r, min(dim, 32*k), k, type(undef, dim))
+    return LanczosFA(k, min(dim, 32*k), k, type(undef, dim))
 end
 
 function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
@@ -53,8 +51,9 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # ideally the output wouldn't have any Nans, or you could check for this in the conversion, or in Krylov
     # sometimes there are NaNs
     # sometimes get a LAPACK chklapackerror_positive(::Int64)
+    B = Tridiagonal(Matrix(B[1:solver.rank,:]))
     # E = eigen(SymTridiagonal(Matrix(B[1:solver.rank,:]))) #Getting weird LAPACK errors mentioned above
-    E = eigen(Tridiagonal(Matrix(B[1:solver.rank,:])))
+    E = eigen(B)
     # E = eigen(Matrix(B[1:solver.rank,:]))
 
     #Temporary memory, NOTE: Can you get away with just one of these?
@@ -70,10 +69,18 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     solver.p .-= pinv(sqrt(λ))*g
 
     #Update rank
+    # e1 = zeros(solver.rank)
+    # e1[1] = g_norm
+    # println(norm(Hv*(Q*(B\e1)) - g))
+
+    # println(sqrt(dot(solver.p, Hv*(Hv*solver.p)+λ*solver.p))/g_norm)
     err = sqrt(abs((norm(Hv*solver.p)/g_norm)^2-1))
-    if err ≥ 1e-3
+    res = norm(g/g_norm-Hv*(Q*(B\e1)))
+    println(res)
+
+    if err ≥ 1e-1
         solver.rank = min(solver.max_rank, solver.rank*2)
-    elseif err ≤ 1e-6
+    elseif err ≤ 1e-4
         solver.rank = max(solver.min_rank, div(solver.rank, 2))
     end
 
