@@ -74,13 +74,15 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # println(norm(Hv*(Q*(B\e1)) - g))
 
     # println(sqrt(dot(solver.p, Hv*(Hv*solver.p)+λ*solver.p))/g_norm)
-    err = sqrt(abs((norm(Hv*solver.p)/g_norm)^2-1))
-    res = norm(g/g_norm-Hv*(Q*(B\e1)))
-    println(res)
+    # err = sqrt(abs((norm(Hv*solver.p)/g_norm)^2-1))
+    @. cache1 = pinv(E.values)*E.vectors[1,:]
+    mul!(cache2, E.vectors, cache1)
+    res = norm(g-g_norm*Hv*(Q*cache2))
+    # println(res)
 
-    if err ≥ 1e-1
+    if res ≥ 1e-3
         solver.rank = min(solver.max_rank, solver.rank*2)
-    elseif err ≤ 1e-4
+    elseif res ≤ 1e-5
         solver.rank = max(solver.min_rank, div(solver.rank, 2))
     end
 
