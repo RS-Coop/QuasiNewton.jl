@@ -43,7 +43,8 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
 
     push!(stats.krylov_iterations, solver.rank) #NOTE: I think, could be OB1
 
-    Q = Q[:,1:solver.rank] #NOTE: do a view instead?
+    #Temporarily use search direction for residual computation
+    @. solver.p = -g_norm*T[k+1,k]*Q[:,k+1]
     
     #NOTE: This whole process isn't ideal
     # do a view instead
@@ -55,10 +56,16 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # E = eigen(SymTridiagonal(Matrix(B[1:solver.rank,:]))) #Getting weird LAPACK errors mentioned above
     E = eigen(B)
     # E = eigen(Matrix(B[1:solver.rank,:]))
+    Q = Q[:,1:solver.rank] #NOTE: do a view instead?
 
     #Temporary memory, NOTE: Can you get away with just one of these?
     cache1 = S(undef, solver.rank)
     cache2 = S(undef, solver.rank)
+
+    #Compute residual
+    @. cache1 = pinv(E.values)*E.vectors[1,:]
+    solver.p .*= dot(E.vectors[solver.rank,:], cache1)
+    res = norm(solver.p)
 
     #Update search direction
     @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
@@ -69,17 +76,6 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     solver.p .-= pinv(sqrt(λ))*g
 
     #Update rank
-    # e1 = zeros(solver.rank)
-    # e1[1] = g_norm
-    # println(norm(Hv*(Q*(B\e1)) - g))
-
-    # println(sqrt(dot(solver.p, Hv*(Hv*solver.p)+λ*solver.p))/g_norm)
-    # err = sqrt(abs((norm(Hv*solver.p)/g_norm)^2-1))
-    @. cache1 = pinv(E.values)*E.vectors[1,:]
-    mul!(cache2, E.vectors, cache1)
-    res = norm(g-g_norm*Hv*(Q*cache2))
-    # println(res)
-
     if res ≥ 1e-3
         solver.rank = min(solver.max_rank, solver.rank*2)
     elseif res ≤ 1e-5
