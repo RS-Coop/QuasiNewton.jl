@@ -30,7 +30,7 @@ function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
         k = Int(ceil(log(dim)))
     end
 
-    return LanczosFA(k, min(dim, 32*k), k, type(undef, dim))
+    return LanczosFA(k, min(dim, 16*k), k, type(undef, dim))
 end
 
 function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
@@ -52,11 +52,10 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # ideally the output wouldn't have any Nans, or you could check for this in the conversion, or in Krylov
     # sometimes there are NaNs
     # sometimes get a LAPACK chklapackerror_positive(::Int64)
-    B = Tridiagonal(Matrix(B[1:solver.rank,:]))
-    # E = eigen(SymTridiagonal(Matrix(B[1:solver.rank,:]))) #Getting weird LAPACK errors mentioned above
+    # B = Tridiagonal(Matrix(B[1:solver.rank,:]))
+    B = SymTridiagonal(Matrix(B[1:solver.rank,:])) #Getting weird LAPACK errors mentioned above
+
     E = eigen(B)
-    # E = eigen(Matrix(B[1:solver.rank,:]))
-    Q = Q[:,1:solver.rank] #NOTE: do a view instead?
 
     #Temporary memory, NOTE: Can you get away with just one of these?
     cache1 = S(undef, solver.rank)
@@ -70,15 +69,18 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     #Update search direction
     @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
     mul!(cache2, E.vectors, cache1)
-    mul!(solver.p, Q, cache2)
+    mul!(solver.p, Q[:,1:solver.rank], cache2)
 
     solver.p *= -g_norm
     solver.p .-= pinv(sqrt(λ))*g
 
     #Update rank
+    # println("Residual: ", res)
     if res ≥ 1e-3
+        # println("Rank increase...")
         solver.rank = min(solver.max_rank, solver.rank*2)
     elseif res ≤ 1e-5
+        # println("Rank decrease...")
         solver.rank = max(solver.min_rank, div(solver.rank, 2))
     end
 
