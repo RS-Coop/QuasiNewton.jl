@@ -44,7 +44,7 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     push!(stats.krylov_iterations, solver.rank) #NOTE: I think, could be OB1
 
     #Temporarily use search direction for residual computation
-    @. solver.p = -g_norm*T[k+1,k]*Q[:,k+1]
+    @. solver.p = -g_norm*B[solver.rank+1,solver.rank]*Q[:,solver.rank+1]
     
     #NOTE: This whole process isn't ideal
     # do a view instead
