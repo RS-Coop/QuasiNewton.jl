@@ -30,6 +30,8 @@ function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
         k = Int(ceil(log(dim)))
     end
 
+    k = Int(ceil(log(dim)))
+
     return LanczosFA(k, min(dim, 16*k), k, type(undef, dim))
 end
 
@@ -52,8 +54,8 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # ideally the output wouldn't have any Nans, or you could check for this in the conversion, or in Krylov
     # sometimes there are NaNs
     # sometimes get a LAPACK chklapackerror_positive(::Int64)
-    # B = Tridiagonal(Matrix(B[1:solver.rank,:]))
-    B = SymTridiagonal(Matrix(B[1:solver.rank,:])) #Getting weird LAPACK errors mentioned above
+    B = Tridiagonal(Matrix(B[1:solver.rank,:]))
+    # B = SymTridiagonal(Matrix(B[1:solver.rank,:])) #Getting weird LAPACK errors mentioned above
 
     E = eigen(B)
 
