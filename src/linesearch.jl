@@ -33,6 +33,7 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, 
 
     #Test search direction, select negative gradient if too small
     p_norm = norm(opt.solver.p)
+    # println("Search norm: ", p_norm)
 
     if p_norm < eps(T)
         stats.status = "Search direction too small"
@@ -72,6 +73,7 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, 
     #Update regularization
     # println("Accepted η: ", η)
     opt.M = max(min(1e8, opt.M/η^2), 1e-8)
+    # println("Update M: ", opt.M)
 
     return success
 end

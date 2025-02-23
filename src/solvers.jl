@@ -32,7 +32,7 @@ function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
 
     k = Int(ceil(log(dim)))
 
-    return LanczosFA(k, min(dim, 16*k), k, type(undef, dim))
+    return LanczosFA(k, min(dim, 1000*k), k, type(undef, dim))
 end
 
 function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
@@ -54,10 +54,16 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # ideally the output wouldn't have any Nans, or you could check for this in the conversion, or in Krylov
     # sometimes there are NaNs
     # sometimes get a LAPACK chklapackerror_positive(::Int64)
-    B = Tridiagonal(Matrix(B[1:solver.rank,:]))
-    # B = SymTridiagonal(Matrix(B[1:solver.rank,:])) #Getting weird LAPACK errors mentioned above
 
-    E = eigen(B)
+    # B = Tridiagonal(Matrix(B[1:solver.rank,:]))
+    # E = eigen(B)
+
+    B = SymTridiagonal(Matrix(B[1:solver.rank,:]))
+
+    #Add and subtract noise to avoid weird LAPACK error
+    d = 1e-6*randn(solver.rank)
+    E = eigen(B+Diagonal(d))
+    E.values .-= d
 
     #Temporary memory, NOTE: Can you get away with just one of these?
     cache1 = S(undef, solver.rank)
