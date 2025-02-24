@@ -104,7 +104,7 @@ function apply!(res::AbstractVector, Hv::EHvpOperator, v::S) where S<:AbstractVe
 
     autodiff(
         Forward,
-        Enzyme.gradient_deferred!,
+        Enzyme.gradient!,
         Const(Reverse),
         Hv.duplicated1,
         Const(Hv.f),

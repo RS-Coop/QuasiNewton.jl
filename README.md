@@ -65,11 +65,9 @@ function rosenbrock(x)
 
 end
 
-x = [0.0, 0.0]
-
-opt = RSFNOptimizer(size(x,1))
-
-minimize!(opt, x, rosenbrock, itmax=10)
+rsfn!(zeros(2), rosenbrock, mode=:EigenSolver, itmax=15)
+rsfn!(zeros(2), rosenbrock, mode=:LanczosFA, itmax=15)
+rsfn!(zeros(2), rosenbrock, mode=:GLKSolver, itmax=15)
 ```
 
 ## Publications
