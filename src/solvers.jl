@@ -31,12 +31,13 @@ function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
     end
 
     k = Int(ceil(log(dim)))
+    r = min(dim, 500)
 
-    return LanczosFA(k, min(dim, 1000*k), k, type(undef, dim))
+    return LanczosFA(k, r, k, type(undef, dim))
 end
 
-function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-
+function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T, it=1) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+    
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
 
@@ -55,15 +56,15 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # sometimes there are NaNs
     # sometimes get a LAPACK chklapackerror_positive(::Int64)
 
-    # B = Tridiagonal(Matrix(B[1:solver.rank,:]))
-    # E = eigen(B)
+    B = Tridiagonal(Matrix(B[1:solver.rank,:]))
+    E = eigen(B)
 
-    B = SymTridiagonal(Matrix(B[1:solver.rank,:]))
+    # B = SymTridiagonal(Matrix(B[1:solver.rank,:]))
 
     #Add and subtract noise to avoid weird LAPACK error
-    d = 1e-6*randn(solver.rank)
-    E = eigen(B+Diagonal(d))
-    E.values .-= d
+    # d = 1e-2*randn(solver.rank)
+    # E = eigen(B+Diagonal(d))
+    # E.values .-= d
 
     #Temporary memory, NOTE: Can you get away with just one of these?
     cache1 = S(undef, solver.rank)
@@ -84,10 +85,20 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
 
     #Update rank
     # println("Residual: ", res)
-    if res ≥ 1e-3
+
+    #Tolerance
+    ζ = 0.5
+    ξ = T(0.01)
+
+    atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
+    rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
+
+    tol = atol + g_norm*rtol
+
+    if res ≥ tol
         # println("Rank increase...")
         solver.rank = min(solver.max_rank, solver.rank*2)
-    elseif res ≤ 1e-5
+    elseif res ≤ 1e-2*tol
         # println("Rank decrease...")
         solver.rank = max(solver.min_rank, div(solver.rank, 2))
     end
