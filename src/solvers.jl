@@ -14,8 +14,8 @@ Lanczos tri-diagonal function approximation
 =#
 mutable struct LanczosFA{I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}}
     rank::I #target rank
-    const max_rank::I #maximum rank
     const min_rank::I #minimum rank
+    const max_rank::I #maximum rank
     p::S #search direction
 end
 
@@ -30,10 +30,12 @@ function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
         k = Int(ceil(log(dim)))
     end
 
-    k = Int(ceil(log(dim)))
-    r = min(dim, 500)
+    # k = Int(ceil(log(dim)))
+    # r = min(dim, 500)
+    k = 10
+    r = k
 
-    return LanczosFA(k, r, k, type(undef, dim))
+    return LanczosFA(k, k, r, type(undef, dim))
 end
 
 function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T, it=1) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
@@ -47,7 +49,9 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     push!(stats.krylov_iterations, solver.rank) #NOTE: I think, could be OB1
 
     #Temporarily use search direction for residual computation
-    @. solver.p = -g_norm*B[solver.rank+1,solver.rank]*Q[:,solver.rank+1]
+    if solver.min_rank != solver.max_rank
+        @. solver.p = -g_norm*B[solver.rank+1,solver.rank]*Q[:,solver.rank+1]
+    end
     
     #NOTE: This whole process isn't ideal
     # do a view instead
@@ -60,6 +64,7 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     E = eigen(B)
 
     # B = SymTridiagonal(Matrix(B[1:solver.rank,:]))
+    # E = eigen(B)
 
     #Add and subtract noise to avoid weird LAPACK error
     # d = 1e-2*randn(solver.rank)
@@ -71,9 +76,11 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     cache2 = S(undef, solver.rank)
 
     #Compute residual
-    @. cache1 = pinv(E.values)*E.vectors[1,:]
-    solver.p .*= dot(E.vectors[solver.rank,:], cache1)
-    res = norm(solver.p)
+    if solver.min_rank != solver.max_rank
+        @. cache1 = pinv(E.values)*E.vectors[1,:]
+        solver.p .*= dot(E.vectors[solver.rank,:], cache1)
+        res = norm(solver.p)
+    end
 
     #Update search direction
     @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
@@ -87,20 +94,22 @@ function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # println("Residual: ", res)
 
     #Tolerance
-    ζ = 0.5
-    ξ = T(0.01)
+    if solver.min_rank != solver.max_rank
+        ζ = 0.5
+        ξ = T(0.01)
 
-    atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
-    rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
+        atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
+        rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
 
-    tol = atol + g_norm*rtol
+        tol = atol + g_norm*rtol
 
-    if res ≥ tol
-        # println("Rank increase...")
-        solver.rank = min(solver.max_rank, solver.rank*2)
-    elseif res ≤ 1e-2*tol
-        # println("Rank decrease...")
-        solver.rank = max(solver.min_rank, div(solver.rank, 2))
+        if res ≥ tol
+            # println("Rank increase...")
+            solver.rank = min(solver.max_rank, solver.rank*2)
+        elseif res ≤ 1e-2*tol
+            # println("Rank decrease...")
+            solver.rank = max(solver.min_rank, div(solver.rank, 2))
+        end
     end
 
     return
