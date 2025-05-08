@@ -4,26 +4,26 @@ Author: Cooper Simpson
 SFN step solvers.
 =#
 
-using FastGaussQuadrature: gausslaguerre, gausschebyshevt
-using Krylov: hermitian_lanczos, CgLanczosShiftSolver, cg_lanczos_shift!, CgLanczosSolver, cg_lanczos!#, CgLanczosShaleSolver, cg_lanczos_shale!
+using FastGaussQuadrature: gausslaguerre
+using Krylov: KrylovWorkspace, krylov_workspace, krylov_solve!, iteration_count, issolved, solution
 
 ########################################################
 
 #=
 Lanczos tri-diagonal function approximation
 =#
-mutable struct LanczosFA{I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}}
+mutable struct LFASolver{I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}}
     rank::I #target rank
     const min_rank::I #minimum rank
     const max_rank::I #maximum rank
     p::S #search direction
 end
 
-function hvp_power(solver::LanczosFA)
+function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) where {I<:Integer, T<:AbstractFloat}
+function LanczosFA(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}) where {I<:Integer, T<:AbstractFloat}
     if dim≤10000
         k = Int(ceil(sqrt(dim)))
     else
@@ -35,10 +35,10 @@ function LanczosFA(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
     k = 10
     r = k
 
-    return LanczosFA(k, k, r, type(undef, dim))
+    return LFASolver(k, k, r, type(undef, dim))
 end
 
-function step!(solver::LanczosFA, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T, it=1) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T, it=1) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
@@ -120,8 +120,8 @@ end
 #=
 Shifted CG Lanczos with Gauss-Laguerre quadrature.
 =#
-mutable struct GLKSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}}
-    krylov_solver::CgLanczosShiftSolver #Krylov solver
+mutable struct GLKSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}, W<:KrylovWorkspace}
+    workspace::W #Krylov workspace
     const krylov_order::I #maximum Krylov subspace size
     const quad_nodes::S #quadrature nodes
     const quad_weights::S #quadrature weights
@@ -132,7 +132,7 @@ function hvp_power(solver::GLKSolver)
     return 2
 end
 
-function GLKSolver(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}, quad_order::I=61, krylov_order::I=0) where {I<:Integer, T<:AbstractFloat}
+function GLKSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, quad_order::I=61, krylov_order::I=0) where {I<:Integer, T<:AbstractFloat}
 
     #Quadrature
     nodes, weights = gausslaguerre(quad_order, 0.0, reduced=true)
@@ -151,15 +151,15 @@ function GLKSolver(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}, quad
     @. weights = (2.0/pi)*weights*exp(nodes)
     @. nodes = nodes^2
 
-    #Krylov solver
-    solver = CgLanczosShiftSolver(dim, dim, quad_order, type)
+    #Krylov workspace
+    workspace = krylov_workspace(Val(:cg_lanczos_shift), dim, dim, quad_order, type)
     if krylov_order == -1
         krylov_order = dim
     elseif krylov_order == -2
         krylov_order = Int(ceil(log(dim)))
     end
 
-    return GLKSolver(solver, krylov_order, T.(nodes), T.(weights), type(undef, dim))
+    return GLKSolver(workspace, krylov_order, T.(nodes), T.(weights), type(undef, dim))
 end
 
 function step!(solver::GLKSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
@@ -199,18 +199,18 @@ function step!(solver::GLKSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # cg_rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
 
     #CG solves
-    cg_lanczos_shift!(solver.krylov_solver, Hv, -g, shifts, M=P, itmax=solver.krylov_order, timemax=time_limit, atol=cg_atol, rtol=cg_rtol)
+    krylov_solve!(solver.workspace, Hv, -g, shifts, M=P, itmax=solver.krylov_order, timemax=time_limit, atol=cg_atol, rtol=cg_rtol)
 
-    converged = sum(solver.krylov_solver.converged)
-    if converged != length(shifts)
-        println("WARNING: Solver failed, only ", converged, " converged")
-    end
+    # converged = sum(solver.workspace.converged)
+    # if converged != length(shifts)
+    #     println("WARNING: Solver failed, only ", converged, " converged")
+    # end
 
-    push!(stats.krylov_iterations, solver.krylov_solver.stats.niter)
+    push!(stats.krylov_iterations, iteration_count(solver.workspace))
 
     #Update search direction
     for i in eachindex(shifts)
-        @inbounds solver.p .+= solver.quad_weights[i]*solver.krylov_solver.x[i]
+        @inbounds solver.p .+= solver.quad_weights[i]*solution(solver.workspace, i)
     end
 
     solver.p .*= sqrt(β)
@@ -231,7 +231,7 @@ function hvp_power(solver::EigenSolver)
     return 1
 end
 
-function EigenSolver(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}) where {I<:Integer, T<:AbstractFloat}
+function EigenSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}) where {I<:Integer, T<:AbstractFloat}
     return EigenSolver(type(undef, dim))
 end
 
@@ -259,8 +259,8 @@ end
 #=
 Adaptive Regularization with Cubics (ARC) solver using shifted CG Lanczos
 =#
-mutable struct ARCSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}}
-    krylov_solver::CgLanczosShiftSolver #Krylov solver
+mutable struct ARCSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}, W<:KrylovWorkspace}
+    workspace::W #Krylov workspace
     const krylov_order::I #maximum Krylov subspace size
     const shifts::S #shifts
     p::S #search direction
@@ -270,21 +270,21 @@ function hvp_power(solver::ARCSolver)
     return 1
 end
 
-function ARCSolver(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}, num_shifts::I=61, krylov_order::I=0) where {I<:Integer, T<:AbstractFloat}
+function ARCSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, num_shifts::I=61, krylov_order::I=0) where {I<:Integer, T<:AbstractFloat}
 
     #Shifts
     #TODO: Make this variable to num_shifts
     shifts = 10.0 .^ (collect(-10.0:0.5:20.0))
 
-    #Krylov solver
-    solver = CgLanczosShiftSolver(dim, dim, num_shifts, type)
+    #Krylov workspace
+    workspace = krylov_workspace(Val(:cg_lanczos_shift), dim, dim, num_shifts, type)
     if krylov_order == -1
         krylov_order = dim
     elseif krylov_order == -2
         krylov_order = Int(ceil(log(dim)))
     end
 
-    return ARCSolver(solver, krylov_order, shifts, type(undef, dim))
+    return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
 end
 
 function step!(solver::ARCSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
@@ -307,9 +307,9 @@ function step!(solver::ARCSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     end
 
     #Solve subproblem
-    cg_lanczos_shift!(solver.krylov_solver, Hv, -g, solver.shifts, itmax=solver.krylov_order, timemax=time_limit, check_curvature=true, atol=cg_atol, rtol=cg_rtol, callback=cb)
+    krylov_solve!(solver.workspace, Hv, -g, solver.shifts, itmax=solver.krylov_order, timemax=time_limit, check_curvature=true, atol=cg_atol, rtol=cg_rtol, callback=cb)
 
-    push!(stats.krylov_iterations, solver.krylov_solver.stats.niter)
+    push!(stats.krylov_iterations, iteration_count(solver.workspace))
 
     return
 end
@@ -319,8 +319,8 @@ end
 #=
 
 =#
-mutable struct RNSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}}
-    krylov_solver::CgLanczosShiftSolver #krylov inverse mat vec solver
+mutable struct RNSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}, W<:KrylovWorkspace}
+    workspace::W #krylov workspace
     const krylov_order::I #maximum Krylov subspace size
     p::S #search direction
 end
@@ -329,17 +329,17 @@ function hvp_power(solver::RNSolver)
     return 1
 end
 
-function RNSolver(dim::I, type::Type{<:AbstractVector{T}}=Vector{Float64}, krylov_order::I=0) where {I<:Integer, T<:AbstractFloat}
+function RNSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, krylov_order::I=0) where {I<:Integer, T<:AbstractFloat}
 
-    #krylov solver
-    solver = CgLanczosShiftSolver(dim, dim, 1, type)
+    #krylov workspace
+    workspace = krylov_workspace(Val(:cg_lanczos_shift), dim, dim, 1, type)
     if krylov_order == -1
         krylov_order = dim
     elseif krylov_order == -2
         krylov_order = Int(ceil(log(dim)))
     end
 
-    return RNSolver(solver, krylov_order, type(undef, dim))
+    return RNSolver(workspace, krylov_order, type(undef, dim))
 end
 
 function step!(solver::RNSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
@@ -352,15 +352,62 @@ function step!(solver::RNSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, tim
     cg_atol = max(sqrt(eps(T)), min(ξ, ξ*λ^(1+ζ)))
     cg_rtol = max(sqrt(eps(T)), min(ξ, ξ*λ^(ζ)))
     
-    cg_lanczos_shift!(solver.krylov_solver, Hv, -g, [λ], itmax=solver.krylov_order, timemax=time_limit, atol=cg_atol, rtol=cg_rtol)
+    krylov_solve!(solver.workspace, Hv, -g, [λ], itmax=solver.krylov_order, timemax=time_limit, atol=cg_atol, rtol=cg_rtol)
 
-    if sum(solver.krylov_solver.converged) != 1
+    if !issolved(solver.workspace)
         println("WARNING: Solver failure")
     end
 
-    push!(stats.krylov_iterations, solver.krylov_solver.stats.niter)
+    push!(stats.krylov_iterations, iteration_count(solver.workspace))
 
-    solver.p .= solver.krylov_solver.x[1]
+    solver.p .= solution(solver.workspace, 1)
+
+    return
+end
+
+########################################################
+
+#=
+
+=#
+
+mutable struct NewtonSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}, W<:KrylovWorkspace}
+    workspace::W #krylov workspace
+    const krylov_order::I #maximum Krylov subspace size
+    p::S #search direction
+end
+
+function hvp_power(solver::NewtonSolver)
+    return 1
+end
+
+function NewtonSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, krylov_order::I=0, posdef::Bool=false) where {I<:Integer, T<:AbstractFloat}
+
+    #krylov workspace
+    solver = posdef ? :cg_lanczos : :symmlq
+
+    workspace = krylov_workspace(Val(solver), dim, dim, type)
+
+    if krylov_order == -1
+        krylov_order = dim
+    elseif krylov_order == -2
+        krylov_order = Int(ceil(log(dim)))
+    end
+
+    return NewtonSolver(workspace, krylov_order, type(undef, dim))
+end
+
+function step!(solver::NewtonSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
+
+    krylov_solve!(solver.workspace, Hv, g, timemax=time_limit, itmax=solver.krylov_order)
+
+    if !issolved(solver.workspace)
+        println("WARNING: Solver failure")
+    end
+
+    push!(stats.krylov_iterations, iteration_count(solver.workspace))
+
+    solver.p .= solution(solver.workspace)
 
     return
 end

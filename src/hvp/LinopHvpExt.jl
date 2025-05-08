@@ -12,7 +12,7 @@ export LHvpOperator
 #=
 
 =#
-mutable struct LHvpOperator{F, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer, L} <: HvpOperator{T}
+mutable struct LHvpOperator{F<:Function, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer, L} <: HvpOperator{T}
     f::F
     x::S
     op::L
@@ -39,7 +39,7 @@ Input:
     f :: function that builds hessian operator
 	x :: input to f
 =#
-function LHvpOperator(f::F, x::S; power::I=1) where {F, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer}
+function LHvpOperator(f::F, x::S; power::I=1) where {F<:Function, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer}
 	return LHvpOperator(f, x, f(x), 0, power)
 end
 

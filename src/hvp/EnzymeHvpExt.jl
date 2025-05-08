@@ -17,7 +17,7 @@ Input:
 	x :: input to f
 	v :: vector
 =#
-function ehvp(f::F, x::S, v::S) where {F, T<:AbstractFloat, S<:AbstractVector{T}}
+function ehvp(f::F, x::S, v::S) where {F<:Function, T<:AbstractFloat, S<:AbstractVector{T}}
 
     res = similar(x)
     ehvp!(res, f, x, v)
@@ -34,7 +34,7 @@ Input:
 	x :: input to f
 	v :: vector
 =#
-function ehvp!(res::S, f::F, x::S, v::S) where {F, T<:AbstractFloat, S<:AbstractVector{T}}
+function ehvp!(res::S, f::F, x::S, v::S) where {F<:Function, T<:AbstractFloat, S<:AbstractVector{T}}
 
     make_zero!(res)
     grad = make_zero(x)
@@ -52,7 +52,7 @@ end
 #=
 In-place hvp operator compatible with Krylov.jl
 =#
-mutable struct EHvpOperator{F, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer} <: HvpOperator{T}
+mutable struct EHvpOperator{F<:Function, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer} <: HvpOperator{T}
     x::S
     duplicated1::DuplicatedNoNeed{S}
     duplicated2::Duplicated{S}
@@ -81,7 +81,7 @@ Input:
 	f :: scalar valued function
 	x :: input to f
 =#
-function EHvpOperator(f::F, x::S; power::Integer=1) where {F, T<:AbstractFloat, S<:AbstractVector{T}}
+function EHvpOperator(f::F, x::S; power::Integer=1) where {F<:Function, T<:AbstractFloat, S<:AbstractVector{T}}
     
     duplicated1 = DuplicatedNoNeed(similar(x), similar(x))
     duplicated2 = Duplicated(x, similar(x))

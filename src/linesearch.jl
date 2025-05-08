@@ -4,6 +4,8 @@ Author: Cooper Simpson
 Line-search procedures.
 =#
 
+using LineSearches: BackTracking
+
 ########################################################
 
 function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, g_norm::T, Hv::H) where {F, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
@@ -23,7 +25,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, g_norm::T, Hv::H) where {F, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
 
     #Setup
     p = opt.solver.p
@@ -91,7 +93,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, g_norm::T, Hv::H) where {F, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
 
     #Setup
     p = opt.solver.p
@@ -120,7 +122,7 @@ end
 ########################################################
 
 #=
-In place SFN step-size line-search
+In place ARC search direction search
 
 Input:
     x :: current iterate
@@ -130,7 +132,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, g_norm::T, Hv::H) where {F, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     
     #Cubic sub-problem
     cubic_subprob = (d) -> begin
@@ -188,6 +190,50 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, g_n
     end
 
     opt.M = min(M_new, 1e15)
+
+    return success
+end
+
+########################################################
+
+#=
+In place Newton step-size line-search
+
+Input:
+    x :: current iterate
+    p :: search direction
+    f :: scalar valued function
+    fval :: current function value
+    λ :: regularization
+    α :: float in (0,1)
+=#
+function search!(opt::NewtonOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+    
+    #Setup
+    p = opt.solver.p
+    success = true
+
+    function ϕ(t)
+        stats.f_evals += 1
+        return f(x-t*p)
+    end
+
+    function dϕ(t)
+        stats.f_evals += 1
+        fg!(g, x-t*p)
+        return dot(g, -p)
+    end
+
+    function ϕdϕ(t)
+        stats.f_evals += 1
+        phi = fg!(g, x-t*p)
+        dphi = dot(g, -p)
+        return (phi, dphi)
+    end  
+
+    α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(-p, g))
+
+    p .*= α
 
     return success
 end

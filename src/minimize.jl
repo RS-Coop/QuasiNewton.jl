@@ -17,7 +17,7 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function minimize!(opt::O, x::S, f::F; itmax::I=1000, time_limit::T2=Inf) where {O<:Optimizer, T1<:AbstractFloat, S<:AbstractVector{T1}, T2, F, I}
+function minimize!(opt::O, x::S, f::F; itmax::I=1000, time_limit::T2=Inf) where {O<:Optimizer, T1<:AbstractFloat, S<:AbstractVector{T1}, T2, F<:Function, I<:Integer}
     #Setup hvp operator
 
     #NEW: Using Enzyme
@@ -60,7 +60,7 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function minimize!(opt::O, x::S, f::F1, fg!::F2, H::L; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, L, I}
+function minimize!(opt::O, x::S, f::F1, fg!::F2, H::F3; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, F3<:Function, I<:Integer}
     #Setup hvp operator
     Hv = LHvpOperator(H, x, power=hvp_power(opt.solver))
 
@@ -82,7 +82,7 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, H<:HvpOperator, I}
+function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, H<:HvpOperator, I<:Integer}
     #Start time
     tic = time_ns()
     
@@ -156,10 +156,10 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
         step!(opt.solver, stats, Hv, grads, g_norm, opt.M, time_limit-time)
 
         #Linesearch
-        if opt.linesearch && !search!(opt, stats, x, f, fval, grads, g_norm, Hv)
+        if opt.linesearch && !search!(opt, stats, x, f, fg!, fval, grads, g_norm, Hv)
             break
         else
-            x .+= opt.solver.p
+            x .+= opt.η*opt.solver.p
         end
         ##########
 
