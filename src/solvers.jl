@@ -5,7 +5,7 @@ SFN step solvers.
 =#
 
 using FastGaussQuadrature: gausslaguerre
-using Krylov: KrylovWorkspace, krylov_workspace, krylov_solve!, iteration_count, issolved, solution
+using Krylov: hermitian_lanczos, KrylovWorkspace, krylov_workspace, krylov_solve!, iteration_count, issolved, solution
 
 ########################################################
 
@@ -23,7 +23,7 @@ function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LanczosFA(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}) where {I<:Integer, T<:AbstractFloat}
+function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}) where {I<:Integer, T<:AbstractFloat}
     if dim≤10000
         k = Int(ceil(sqrt(dim)))
     else
