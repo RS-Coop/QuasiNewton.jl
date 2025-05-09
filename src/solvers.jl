@@ -210,7 +210,7 @@ function step!(solver::GLKSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
 
     #Update search direction
     for i in eachindex(shifts)
-        @inbounds solver.p .+= solver.quad_weights[i]*solution(solver.workspace, i)
+        @inbounds solver.p .+= solver.quad_weights[i]*solution(solver.workspace)[i]
     end
 
     solver.p .*= sqrt(β)
@@ -360,7 +360,7 @@ function step!(solver::RNSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, tim
 
     push!(stats.krylov_iterations, iteration_count(solver.workspace))
 
-    solver.p .= solution(solver.workspace, 1)
+    solver.p .= solution(solver.workspace)[1]
 
     return
 end
@@ -399,7 +399,7 @@ end
 
 function step!(solver::NewtonSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
 
-    krylov_solve!(solver.workspace, Hv, g, timemax=time_limit, itmax=solver.krylov_order)
+    krylov_solve!(solver.workspace, Hv, -g, timemax=time_limit, itmax=solver.krylov_order)
 
     if !issolved(solver.workspace)
         println("WARNING: Solver failure")

@@ -8,8 +8,8 @@ using LineSearches: BackTracking
 
 ########################################################
 
-function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F, fval::T, g::S, g_norm::T, Hv::H) where {F, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-    return search_η!(opt, stats, x, f, fval, g, g_norm, Hv)
+function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+    return search_η!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
@@ -145,18 +145,20 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
     shift_failure = false
     M_new = opt.M
     
-    i = findfirst(opt.solver.krylov_solver.converged)
+    i = findfirst(opt.solver.workspace.converged)
 
     if i === nothing
         return success
     end
 
-    j = argmin(abs.(opt.M*opt.solver.shifts[i:end]-norm.(opt.solver.krylov_solver.x[i:end]))) + i-1
+    X = solution(opt.solver.workspace)
+
+    j = argmin(abs.(opt.M*opt.solver.shifts[i:end]-norm.(X[i:end]))) + i-1
 
     while !success && !shift_failure
         stats.f_evals += 1
 
-        ρ = (fval - f(x + opt.solver.krylov_solver.x[j]))/(fval - cubic_subprob(opt.solver.krylov_solver.x[j]))
+        ρ = (fval - f(x + X[j]))/(fval - cubic_subprob(X[j]))
 
         #unsuccessful
         if ρ < opt.η1
@@ -168,7 +170,7 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
                     shift_failure = true
                     break
                 end
-                M_new = norm(opt.solver.krylov_solver.x[j+1])/opt.solver.shifts[j+1]
+                M_new = norm(X[j+1])/opt.solver.shifts[j+1]
                 j += 1
             end
             
@@ -178,7 +180,7 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
             # println("Shift: ", opt.solver.shifts[i])
 
             #step
-            opt.solver.p .= opt.solver.krylov_solver.x[j]
+            opt.solver.p .= X[j]
 
             #very successful
             if ρ > opt.η2
@@ -215,23 +217,23 @@ function search!(opt::NewtonOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
 
     function ϕ(t)
         stats.f_evals += 1
-        return f(x-t*p)
+        return f(x+t*p)
     end
 
     function dϕ(t)
         stats.f_evals += 1
-        fg!(g, x-t*p)
-        return dot(g, -p)
+        fg!(g, x+t*p)
+        return dot(g, p)
     end
 
     function ϕdϕ(t)
         stats.f_evals += 1
-        phi = fg!(g, x-t*p)
-        dphi = dot(g, -p)
+        phi = fg!(g, x+t*p)
+        dphi = dot(g, p)
         return (phi, dphi)
     end  
 
-    α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(-p, g))
+    α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
 
     p .*= α
 
