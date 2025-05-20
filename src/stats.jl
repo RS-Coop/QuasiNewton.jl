@@ -36,6 +36,7 @@ function Base.show(io::IO, stats::Stats)
                 "Hvp Evals: ", stats.hvp_evals, '\n',
                 "Run Time (s): ", stats.run_time, '\n',
                 "Minimum: ", stats.f_seq[end], '\n',
+                "Gradient Norm: ", norm(stats.g_seq[end]), '\n',
                 "Avg. Krylov Iterations: ", mean(stats.krylov_iterations), '\n',
                 "Status: ", stats.status, '\n')
 end
