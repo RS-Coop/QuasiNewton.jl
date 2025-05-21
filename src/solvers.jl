@@ -38,7 +38,7 @@ function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}) wher
     return LFASolver(k, k, r, type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T, it=1) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
