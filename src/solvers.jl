@@ -370,7 +370,6 @@ end
 #=
 
 =#
-
 mutable struct NewtonSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}, W<:KrylovWorkspace}
     workspace::W #krylov workspace
     const krylov_order::I #maximum Krylov subspace size
