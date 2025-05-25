@@ -23,19 +23,15 @@ function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}) where {I<:Integer, T<:AbstractFloat}
-    if dim≤10000
-        k = Int(ceil(sqrt(dim)))
+function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, 10), adapt::Bool=true) where {I<:Integer, T<:AbstractFloat}
+
+    if adapt
+        min_rank, max_rank = 1, 1000
     else
-        k = Int(ceil(log(dim)))
+        min_rank, max_rank = rank, rank
     end
 
-    # k = Int(ceil(log(dim)))
-    # r = min(dim, 500)
-    k = 10
-    r = k
-
-    return LFASolver(k, k, r, type(undef, dim))
+    return LFASolver(rank, min_rank, max_rank, type(undef, dim))
 end
 
 function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
@@ -64,11 +60,12 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     E = eigen(B)
 
     # B = SymTridiagonal(Matrix(B[1:solver.rank,:]))
-    # E = eigen(B)
+    # E = eigen!(B)
 
     #Add and subtract noise to avoid weird LAPACK error
-    # d = 1e-2*randn(solver.rank)
-    # E = eigen(B+Diagonal(d))
+    # d = randn(solver.rank)
+    # B = SymTridiagonal(Matrix(B[1:solver.rank,:] + Diagonal(d)))
+    # E = eigen!(B)
     # E.values .-= d
 
     #Temporary memory, NOTE: Can you get away with just one of these?
@@ -354,9 +351,9 @@ function step!(solver::RNSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, tim
     
     krylov_solve!(solver.workspace, Hv, -g, [λ], itmax=solver.krylov_order, timemax=time_limit, atol=cg_atol, rtol=cg_rtol)
 
-    if !issolved(solver.workspace)
-        println("WARNING: Solver failure")
-    end
+    # if !issolved(solver.workspace)
+    #     println("WARNING: Solver failure")
+    # end
 
     push!(stats.krylov_iterations, iteration_count(solver.workspace))
 
@@ -400,9 +397,9 @@ function step!(solver::NewtonSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T,
 
     krylov_solve!(solver.workspace, Hv, -g, timemax=time_limit, itmax=solver.krylov_order)
 
-    if !issolved(solver.workspace)
-        println("WARNING: Solver failure")
-    end
+    # if !issolved(solver.workspace)
+    #     println("WARNING: Solver failure")
+    # end
 
     push!(stats.krylov_iterations, iteration_count(solver.workspace))
 

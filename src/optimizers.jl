@@ -38,7 +38,7 @@ Input:
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
 =#
-function SFNOptimizer(dim::I, solver::Symbol=:LFASolver; M::T1=1.0, η::T2=1.0, ϵ::T2=eps(Float64), linesearch::Bool=false, α::T2=0.5, atol::T2=1e-5, rtol::T2=1e-6) where {I<:Integer, T1<:Real, T2<:AbstractFloat}
+function SFNOptimizer(dim::I, solver::Symbol=:LFASolver; M::T1=1.0, η::T2=1.0, ϵ::T2=eps(Float64), linesearch::Bool=false, α::T2=0.5, atol::T2=1e-5, rtol::T2=1e-6, kwargs...) where {I<:Integer, T1<:Real, T2<:AbstractFloat}
     
     #Regularization
     @assert (isnan(M) || 0≤M) && 0≤ϵ
@@ -49,7 +49,7 @@ function SFNOptimizer(dim::I, solver::Symbol=:LFASolver; M::T1=1.0, η::T2=1.0, 
         @assert 0<η && η≤1
     end
 
-    solver = eval(solver)(dim)
+    solver = eval(solver)(dim; kwargs...)
 
     return SFNOptimizer(M, solver, η, ϵ, linesearch, α, atol, rtol)
 end
