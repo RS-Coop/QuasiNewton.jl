@@ -33,7 +33,7 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     success = true
     λ = max(min(1e15, opt.M*g_norm), 1e-15)
 
-    if λ == 0.
+    if opt.M == 0.
         function ϕ(t)
             stats.f_evals += 1
             return f(x+t*p)
@@ -62,11 +62,6 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     #Test search direction, select negative gradient if too small
     p_norm = norm(opt.solver.p)
     # println("Search norm: ", p_norm)
-
-    if p_norm < eps(T)
-        stats.status = "Search direction too small"
-        return !success
-    end
     
     #Increase step-size
     η = 2.0
@@ -78,11 +73,22 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     #Target decrement
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
+    #Check search direction
+    if p_norm < sqrt(eps(T))
+        success = false
+        # stats.status = "Search direction too small"
+        opt.M = 1e-8
+    end
+
     #NOTE: Can we just iteratively update x, is that even that much better?
-    while true
+    while success
         stats.f_evals += 1
 
         if f(x+p)-fval ≤ dec
+            #Update regularization
+            # println("Accepted η: ", η)
+            opt.M = max(min(1e8, opt.M/η^2), 1e-8)
+            # println("Update M: ", opt.M)
             break
         else
             η *= opt.α #reduce step-size
@@ -91,17 +97,12 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
         end
 
         #Check step-size
-        if η < eps(T)
+        if η < sqrt(eps(T))
             success = false
-            stats.status = "Linesearch failed"
-            break
+            # stats.status = "Linesearch failed"
+            opt.M = 1.0
         end
     end
-
-    #Update regularization
-    # println("Accepted η: ", η)
-    opt.M = max(min(1e8, opt.M/η^2), 1e-8)
-    # println("Update M: ", opt.M)
 
     return success
 end

@@ -26,7 +26,7 @@ end
 function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(sqrt(dim)))), adapt::Bool=true) where {I<:Integer, T<:AbstractFloat}
 
     if adapt
-        min_rank, max_rank = 1, 1000
+        min_rank, max_rank = 1, min(dim, 1000)
     else
         min_rank, max_rank = rank, rank
     end

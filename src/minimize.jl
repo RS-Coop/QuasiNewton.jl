@@ -157,7 +157,8 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
 
         #Linesearch
         if opt.linesearch && !search!(opt, stats, x, f, fg!, fval, grads, g_norm, Hv)
-            break
+            # break
+            continue
         else
             x .+= opt.η*opt.solver.p
         end
