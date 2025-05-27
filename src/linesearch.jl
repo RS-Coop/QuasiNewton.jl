@@ -33,6 +33,32 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     success = true
     λ = max(min(1e15, opt.M*g_norm), 1e-15)
 
+    if λ == 0.
+        function ϕ(t)
+            stats.f_evals += 1
+            return f(x+t*p)
+        end
+
+        function dϕ(t)
+            stats.f_evals += 1
+            fg!(g, x+t*p)
+            return dot(g, p)
+        end
+
+        function ϕdϕ(t)
+            stats.f_evals += 1
+            phi = fg!(g, x+t*p)
+            dphi = dot(g, p)
+            return (phi, dphi)
+        end  
+
+        α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
+
+        p .*= α
+
+        return success
+    end
+
     #Test search direction, select negative gradient if too small
     p_norm = norm(opt.solver.p)
     # println("Search norm: ", p_norm)
