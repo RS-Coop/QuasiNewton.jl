@@ -23,7 +23,7 @@ function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, 10), adapt::Bool=true) where {I<:Integer, T<:AbstractFloat}
+function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(sqrt(dim)))), adapt::Bool=true) where {I<:Integer, T<:AbstractFloat}
 
     if adapt
         min_rank, max_rank = 1, 1000
@@ -63,7 +63,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     # E = eigen!(B)
 
     #Add and subtract noise to avoid weird LAPACK error
-    # d = randn(solver.rank)
+    # d = 1e-4*randn(solver.rank)
     # B = SymTridiagonal(Matrix(B[1:solver.rank,:] + Diagonal(d)))
     # E = eigen!(B)
     # E.values .-= d

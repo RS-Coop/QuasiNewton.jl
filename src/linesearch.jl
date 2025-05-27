@@ -101,7 +101,7 @@ function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::
     success = true
     λ = max(min(1e15, opt.M*g_norm), 1e-15)
 
-    #Test search direction, select negative gradient if too small
+    #Test search direction
     p_norm = norm(opt.solver.p)
 
     #Target decrement

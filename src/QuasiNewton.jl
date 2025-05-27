@@ -76,7 +76,7 @@ end
 function arc!(x::S, f::F; itmax::I, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
 	opt = ARCOptimizer(size(x,1), atol=atol, rtol=rtol)
 
-	stats = minimize!(opt, x, f, itmax=itmax, time_limit=time_limit)
+	stats = minimize!(opt, x, f; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
@@ -84,7 +84,7 @@ end
 function arc!(x::S, f::F1, fg!::F2, H::L; itmax::I, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, L, I}
 	opt = ARCOptimizer(size(x,1), atol=atol, rtol=rtol)
 
-	stats = minimize!(opt, x, f, fg!, H, itmax=itmax, time_limit=time_limit)
+	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
@@ -93,7 +93,7 @@ end
 function newton!(x::S, f::F; posdef::Bool=false, linesearch::Bool=false, itmax::I, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
 	opt = NewtonOptimizer(size(x,1), posdef=posdef, linesearch=linesearch, atol=atol, rtol=rtol)
 
-	stats = minimize!(opt, x, f, itmax=itmax, time_limit=time_limit)
+	stats = minimize!(opt, x, f; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
@@ -101,7 +101,7 @@ end
 function newton!(x::S, f::F1, fg!::F2, H::L; posdef::Bool=false, linesearch::Bool=false, itmax::I, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, L, I}
 	opt = NewtonOptimizer(size(x,1), posdef=posdef, linesearch=linesearch, atol=atol, rtol=rtol)
 
-	stats = minimize!(opt, x, f, fg!, H, itmax=itmax, time_limit=time_limit)
+	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
