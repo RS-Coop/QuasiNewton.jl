@@ -74,7 +74,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
 
     #Compute residual
     if solver.min_rank != solver.max_rank
-        @. cache1 = pinv(E.values)*E.vectors[1,:]
+        @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
         solver.p .*= dot(E.vectors[solver.rank,:], cache1)
         res = norm(solver.p)
     end
