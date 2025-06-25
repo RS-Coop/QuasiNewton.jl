@@ -44,10 +44,8 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
 
     push!(stats.krylov_iterations, solver.rank) #NOTE: I think, could be OB1
 
-    #Temporarily use search direction for residual computation
-    if solver.min_rank != solver.max_rank
-        @. solver.p = -g_norm*B[solver.rank+1,solver.rank]*Q[:,solver.rank+1]
-    end
+    #Save for residual computation
+    βkp1 = B[solver.rank+1,solver.rank]
     
     #NOTE: This whole process isn't ideal
     # do a view instead
@@ -74,21 +72,24 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
 
     #Compute residual
     if solver.min_rank != solver.max_rank
-        @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
-        solver.p .*= dot(E.vectors[solver.rank,:], cache1)
-        res = norm(solver.p)
+        @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
+        z = dot(E.vectors[solver.rank,:], cache1)
+
+        @views @. solver.p = -g_norm*βkp1*z*Q[:,solver.rank+1]
+
+        r_norm = norm(solver.p)
     end
 
     #Update search direction
-    @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
+    @views @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
     mul!(cache2, E.vectors, cache1)
-    mul!(solver.p, Q[:,1:solver.rank], cache2)
+    @views mul!(solver.p, Q[:,1:solver.rank], cache2)
 
     solver.p *= -g_norm
     solver.p .-= pinv(sqrt(λ))*g
 
     #Update rank
-    # println("Residual: ", res)
+    # println("Residual: ", r_norm)
 
     #Tolerance
     if solver.min_rank != solver.max_rank
@@ -100,10 +101,10 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
 
         tol = atol + g_norm*rtol
 
-        if res ≥ tol
+        if r_norm ≥ tol
             # println("Rank increase...")
             solver.rank = min(solver.max_rank, solver.rank*2)
-        elseif res ≤ 1e-2*tol
+        elseif r_norm ≤ 1e-2*tol
             # println("Rank decrease...")
             solver.rank = max(solver.min_rank, div(solver.rank, 2))
         end
