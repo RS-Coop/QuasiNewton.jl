@@ -16,25 +16,27 @@ mutable struct LFASolver{I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}}
     rank::I #target rank
     const min_rank::I #minimum rank
     const max_rank::I #maximum rank
+    const depth::I #recursion_depth
     p::S #search direction
+    r::S #residual
 end
 
 function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(sqrt(dim)))), adapt::Bool=true) where {I<:Integer, T<:AbstractFloat}
+function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(sqrt(dim)))), adapt::Bool=true, depth::I=1, min_rank::I=1, max_rank::I=1000) where {I<:Integer, T<:AbstractFloat}
 
     if adapt
-        min_rank, max_rank = 1, min(dim, 1000)
+        min_rank, max_rank = min_rank, min(dim, max_rank)
     else
         min_rank, max_rank = rank, rank
     end
 
-    return LFASolver(rank, min_rank, max_rank, type(undef, dim))
+    return LFASolver(rank, min_rank, max_rank, depth, type(undef, dim), type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T, depth::Int=solver.depth) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
@@ -70,37 +72,38 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
     cache1 = S(undef, solver.rank)
     cache2 = S(undef, solver.rank)
 
-    #Compute residual
-    if solver.min_rank != solver.max_rank
-        @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
-        z = dot(E.vectors[solver.rank,:], cache1)
-
-        @views @. solver.p = -g_norm*βkp1*z*Q[:,solver.rank+1]
-
-        r_norm = norm(solver.p)
-    end
-
     #Update search direction
     @views @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
     mul!(cache2, E.vectors, cache1)
-    @views mul!(solver.p, Q[:,1:solver.rank], cache2)
+    # @views mul!(solver.p, Q[:,1:solver.rank], cache2)
 
-    solver.p *= -g_norm
+    # solver.p *= -g_norm
+    # solver.p .-= pinv(sqrt(λ))*g
+
+    @views mul!(solver.p, Q[:,1:solver.rank], cache2, -g_norm, 1.)
     solver.p .-= pinv(sqrt(λ))*g
 
-    #Update rank
-    # println("Residual: ", r_norm)
+    #Compute residual
+    if depth != 1 || solver.min_rank != solver.max_rank
+        @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
+        z = dot(E.vectors[solver.rank,:], cache1)
+
+        @views @. solver.r = -g_norm*βkp1*z*Q[:,solver.rank+1]
+
+        r_norm = norm(solver.r)
+    end
 
     #Tolerance
+    ζ = 0.5
+    ξ = T(0.01)
+
+    atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
+    rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
+
+    tol = atol + g_norm*rtol
+    
+    #Rank change
     if solver.min_rank != solver.max_rank
-        ζ = 0.5
-        ξ = T(0.01)
-
-        atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
-        rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
-
-        tol = atol + g_norm*rtol
-
         if r_norm ≥ tol
             # println("Rank increase...")
             solver.rank = min(solver.max_rank, solver.rank*2)
@@ -110,7 +113,14 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, ti
         end
     end
 
-    return
+    #Recurse
+    if depth == 1 || r_norm < tol
+        return
+    else
+        step!(solver, stats, Hv, solver.r, r_norm, M, time_limit, depth-1)
+    end
+
+    # return
 end
 
 ########################################################

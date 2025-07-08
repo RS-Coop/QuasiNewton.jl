@@ -151,6 +151,8 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
 
         #Step
         ##########
+        #Reset search direction
+        opt.solver.p .= zero(eltype(opt.solver.p))
 
         #Solve for search direction
         step!(opt.solver, stats, Hv, grads, g_norm, opt.M, time_limit-time)
