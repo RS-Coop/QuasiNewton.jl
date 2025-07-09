@@ -34,7 +34,7 @@ function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank
     return LFASolver(rank, min_rank, max_rank, type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
@@ -159,7 +159,7 @@ function GLKSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, quad
     return GLKSolver(workspace, krylov_order, T.(nodes), T.(weights), type(undef, dim))
 end
 
-function step!(solver::GLKSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
+function step!(solver::GLKSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
     
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
@@ -232,7 +232,7 @@ function EigenSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}) wh
     return EigenSolver(type(undef, dim))
 end
 
-function step!(solver::EigenSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::T) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function step!(solver::EigenSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
 
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
@@ -284,7 +284,7 @@ function ARCSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, num_
     return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
 end
 
-function step!(solver::ARCSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
+function step!(solver::ARCSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
     
     #Tolerance
     ζ = 0.5
@@ -339,7 +339,7 @@ function RNSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, krylo
     return RNSolver(workspace, krylov_order, type(undef, dim))
 end
 
-function step!(solver::RNSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
+function step!(solver::RNSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
 
     #Regularization
     λ = max(min(1e15, sqrt(M*g_norm)), 1e-15)
@@ -393,7 +393,7 @@ function NewtonSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, k
     return NewtonSolver(workspace, krylov_order, type(undef, dim))
 end
 
-function step!(solver::NewtonSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T, time_limit::Float64=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
+function step!(solver::NewtonSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
 
     krylov_solve!(solver.workspace, Hv, -g, timemax=time_limit, itmax=solver.krylov_order)
 

@@ -153,7 +153,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
         ##########
 
         #Solve for search direction
-        step!(opt.solver, stats, Hv, grads, g_norm, opt.M, time_limit-time)
+        step!(opt.solver, stats, Hv, grads, g_norm, opt.M; time_limit=time_limit-time)
 
         #Linesearch
         if opt.linesearch && !search!(opt, stats, x, f, fg!, fval, grads, g_norm, Hv)
