@@ -159,8 +159,10 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
 
         #Linesearch
         if opt.linesearch && !search!(opt, stats, x, f, fg!, fval, grads, g_norm, Hv)
-            # break
-            continue
+            #What is the right behaviour when the linesearch fails?
+            stats.status = "Linesearch failure"
+            break
+            # continue
         else
             x .+= opt.η*opt.solver.p
         end

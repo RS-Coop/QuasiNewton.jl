@@ -115,7 +115,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
 
     #Recurse
     if depth > 1 && r_norm ≥ tol
-        step!(solver, stats, Hv, solver.r, r_norm, M; time_limit=time_limit, depth=depth-1)
+        step!(solver, stats, Hv, solver.r, r_norm, M; depth=depth-1)
     end
 
     return
