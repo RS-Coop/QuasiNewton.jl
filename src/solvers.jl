@@ -25,7 +25,7 @@ function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(sqrt(dim)))), adapt::Bool=true, depth::I=1, min_rank::I=1, max_rank::I=1000) where {I<:Integer, T<:AbstractFloat}
+function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(sqrt(dim)))), adapt::Bool=true, min_rank::I=1, max_rank::I=1000, depth::I=1) where {I<:Integer, T<:AbstractFloat}
 
     if adapt
         min_rank, max_rank = min_rank, min(dim, max_rank)
@@ -114,13 +114,11 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     end
 
     #Recurse
-    if depth == 1 || r_norm < tol
-        return
-    else
+    if depth > 1 && r_norm ≥ tol
         step!(solver, stats, Hv, solver.r, r_norm, M; time_limit=time_limit, depth=depth-1)
     end
 
-    # return
+    return
 end
 
 ########################################################
