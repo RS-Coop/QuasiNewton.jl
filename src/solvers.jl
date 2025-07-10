@@ -25,7 +25,7 @@ function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(sqrt(dim)))), adapt::Bool=true, min_rank::I=1, max_rank::I=1000, depth::I=1) where {I<:Integer, T<:AbstractFloat}
+function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(log(dim)))), adapt::Bool=true, min_rank::I=1, max_rank::I=1000, depth::I=1) where {I<:Integer, T<:AbstractFloat}
 
     if adapt
         min_rank, max_rank = min_rank, min(dim, max_rank)
@@ -42,7 +42,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     λ = max(min(1e15, M*g_norm), 1e-15)
 
     #Hermitian Lanczos: Unitary tridiagonalization
-    Q, _, B = hermitian_lanczos(Hv, g, solver.rank)
+    Q, _, B = hermitian_lanczos(Hv, g, solver.rank, allow_breakdown=true)
 
     push!(stats.krylov_iterations, solver.rank) #NOTE: I think, could be OB1
 
