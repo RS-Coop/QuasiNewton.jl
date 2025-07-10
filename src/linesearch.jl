@@ -8,6 +8,39 @@ using LineSearches: BackTracking
 
 ########################################################
 
+function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+    
+    #Setup
+    p = opt.solver.p
+    success = true
+
+    function ϕ(t)
+        stats.f_evals += 1
+        return f(x+t*p)
+    end
+
+    function dϕ(t)
+        stats.f_evals += 1
+        fg!(g, x+t*p)
+        return dot(g, p)
+    end
+
+    function ϕdϕ(t)
+        stats.f_evals += 1
+        phi = fg!(g, x+t*p)
+        dphi = dot(g, p)
+        return (phi, dphi)
+    end  
+
+    α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
+
+    p .*= α
+
+    return success
+end
+
+########################################################
+
 function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     return search_η!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
@@ -33,31 +66,9 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     success = true
     λ = max(min(1e15, opt.M*g_norm), 1e-15)
 
-    # if opt.M == 0.
-    #     function ϕ(t)
-    #         stats.f_evals += 1
-    #         return f(x+t*p)
-    #     end
-
-    #     function dϕ(t)
-    #         stats.f_evals += 1
-    #         fg!(g, x+t*p)
-    #         return dot(g, p)
-    #     end
-
-    #     function ϕdϕ(t)
-    #         stats.f_evals += 1
-    #         phi = fg!(g, x+t*p)
-    #         dphi = dot(g, p)
-    #         return (phi, dphi)
-    #     end  
-
-    #     α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
-
-    #     p .*= α
-
-    #     return success
-    # end
+    if opt.M == 0.
+        backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    end
 
     #Test search direction, select negative gradient if too small
     p_norm = norm(opt.solver.p)
@@ -104,33 +115,8 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
         end
     end
 
-    if success == false
-        function ϕ(t)
-            stats.f_evals += 1
-            return f(x+t*p)
-        end
-
-        function dϕ(t)
-            stats.f_evals += 1
-            fg!(g, x+t*p)
-            return dot(g, p)
-        end
-
-        function ϕdϕ(t)
-            stats.f_evals += 1
-            phi = fg!(g, x+t*p)
-            dphi = dot(g, p)
-            return (phi, dphi)
-        end  
-
-        α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
-
-        p .*= α
-
-        return true
-    end
-
-    return success
+    #Fallback to basic backtracking if linesearch failed
+    return success || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
@@ -169,7 +155,8 @@ function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::
         opt.solver.p .= zero(T)
     end
 
-    return success
+    #Fallback to basic backtracking if linesearch failed
+    return success || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
@@ -263,32 +250,5 @@ Input:
     α :: float in (0,1)
 =#
 function search!(opt::NewtonOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-    
-    #Setup
-    p = opt.solver.p
-    success = true
-
-    function ϕ(t)
-        stats.f_evals += 1
-        return f(x+t*p)
-    end
-
-    function dϕ(t)
-        stats.f_evals += 1
-        fg!(g, x+t*p)
-        return dot(g, p)
-    end
-
-    function ϕdϕ(t)
-        stats.f_evals += 1
-        phi = fg!(g, x+t*p)
-        dphi = dot(g, p)
-        return (phi, dphi)
-    end  
-
-    α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
-
-    p .*= α
-
-    return success
+    return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
