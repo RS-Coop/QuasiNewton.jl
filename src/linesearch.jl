@@ -33,31 +33,31 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     success = true
     λ = max(min(1e15, opt.M*g_norm), 1e-15)
 
-    if opt.M == 0.
-        function ϕ(t)
-            stats.f_evals += 1
-            return f(x+t*p)
-        end
+    # if opt.M == 0.
+    #     function ϕ(t)
+    #         stats.f_evals += 1
+    #         return f(x+t*p)
+    #     end
 
-        function dϕ(t)
-            stats.f_evals += 1
-            fg!(g, x+t*p)
-            return dot(g, p)
-        end
+    #     function dϕ(t)
+    #         stats.f_evals += 1
+    #         fg!(g, x+t*p)
+    #         return dot(g, p)
+    #     end
 
-        function ϕdϕ(t)
-            stats.f_evals += 1
-            phi = fg!(g, x+t*p)
-            dphi = dot(g, p)
-            return (phi, dphi)
-        end  
+    #     function ϕdϕ(t)
+    #         stats.f_evals += 1
+    #         phi = fg!(g, x+t*p)
+    #         dphi = dot(g, p)
+    #         return (phi, dphi)
+    #     end  
 
-        α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
+    #     α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
 
-        p .*= α
+    #     p .*= α
 
-        return success
-    end
+    #     return success
+    # end
 
     #Test search direction, select negative gradient if too small
     p_norm = norm(opt.solver.p)
@@ -102,6 +102,32 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
             # stats.status = "Linesearch failed"
             opt.M = 1.0
         end
+    end
+
+    if success == false
+        function ϕ(t)
+            stats.f_evals += 1
+            return f(x+t*p)
+        end
+
+        function dϕ(t)
+            stats.f_evals += 1
+            fg!(g, x+t*p)
+            return dot(g, p)
+        end
+
+        function ϕdϕ(t)
+            stats.f_evals += 1
+            phi = fg!(g, x+t*p)
+            dphi = dot(g, p)
+            return (phi, dphi)
+        end  
+
+        α, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
+
+        p .*= α
+
+        return true
     end
 
     return success
