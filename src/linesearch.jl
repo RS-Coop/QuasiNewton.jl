@@ -36,7 +36,7 @@ function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
 
     p .*= α
 
-    opt.M = max(min(1e8, opt.M/α^2), 1e-8)
+    opt.M = α == 1. ? 2*opt.m : max(min(1e8, opt.M/α^2), 1e-8)
 
     return success
 end
@@ -44,7 +44,7 @@ end
 ########################################################
 
 function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-    return search_η!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
