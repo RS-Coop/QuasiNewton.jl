@@ -36,7 +36,7 @@ function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
 
     p .*= α
 
-    opt.M = α == 1. ? 2*opt.m : max(min(1e8, opt.M/α^2), 1e-8)
+    opt.M = α == 1. ? 2*opt.M : max(min(1e8, opt.M/α^2), 1e-8)
 
     return success
 end
