@@ -44,7 +44,7 @@ end
 ########################################################
 
 function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-    return search_M!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    return search_η!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
