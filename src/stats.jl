@@ -16,6 +16,7 @@ mutable struct Stats{I<:Integer, S1<:Vector{<:AbstractFloat}}
     run_time::Float64 #iteration runtime
     f_seq::S1 #function value sequence
     g_seq::S1 #gradient norm sequence
+    r_seq::S1 #residual norm sequence
     krylov_iterations::S1 #number of Krylov iterations #NOTE: We may not want this long term
     status::String #exit status
 end
@@ -26,7 +27,7 @@ Outer constructor
 Input
 =#
 function Stats(type::Type{<:AbstractFloat})
-    return Stats(false, 0, 0, 0, 0.0, type[], type[], type[], "")
+    return Stats(false, 0, 0, 0, 0.0, type[], type[], type[], type[], "")
 end
 
 function Base.show(io::IO, stats::Stats)

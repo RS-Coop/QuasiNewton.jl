@@ -44,7 +44,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     #Hermitian Lanczos: Unitary tridiagonalization
     Q, _, B = hermitian_lanczos(Hv, g, solver.rank, allow_breakdown=true)
 
-    push!(stats.krylov_iterations, solver.rank) #NOTE: I think, could be OB1
+    depth == solver.depth ? push!(stats.krylov_iterations, solver.rank) : stats.krylov_iterations[end] += solver.rank #NOTE: I think, could be OB1
 
     #Save for residual computation
     βkp1 = B[solver.rank+1,solver.rank]
@@ -84,14 +84,21 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     solver.p .-= pinv(sqrt(λ))*g
 
     #Compute residual
-    if depth != 1 || solver.min_rank != solver.max_rank
-        @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
-        z = dot(E.vectors[solver.rank,:], cache1)
+    # if depth != 1 || solver.min_rank != solver.max_rank
+    #     @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
+    #     z = dot(E.vectors[solver.rank,:], cache1)
 
-        @views @. solver.r = -g_norm*βkp1*z*Q[:,solver.rank+1]
+    #     @views @. solver.r = -g_norm*βkp1*z*Q[:,solver.rank+1]
 
-        r_norm = norm(solver.r)
-    end
+    #     r_norm = norm(solver.r)
+    # end
+
+    @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
+    z = dot(E.vectors[solver.rank,:], cache1)
+
+    @views @. solver.r = -g_norm*βkp1*z*Q[:,solver.rank+1]
+
+    r_norm = norm(solver.r)
 
     #Tolerance
     ζ = 0.5
@@ -116,6 +123,10 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     #Recurse
     if depth > 1 && r_norm ≥ tol
         step!(solver, stats, Hv, solver.r, r_norm, M; depth=depth-1)
+    end
+
+    if depth == 1
+        push!(stats.r_seq, r_norm)
     end
 
     return

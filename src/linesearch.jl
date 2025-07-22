@@ -5,6 +5,7 @@ Line-search procedures.
 =#
 
 using LineSearches: BackTracking
+using Krylov: statistics
 
 ########################################################
 
@@ -220,6 +221,8 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
         else
             success = true
             # println("Shift: ", opt.solver.shifts[i])
+
+            push!(stats.r_seq, norm(statistics(opt.solver.workspace).residuals[i]))
 
             #step
             opt.solver.p .= X[j]
