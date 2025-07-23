@@ -421,6 +421,8 @@ function step!(solver::NewtonSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T;
     #     println("WARNING: Solver failure")
     # end
 
+    push!(stats.r_seq, norm(statistics(solver.workspace).residuals[i]))
+
     push!(stats.krylov_iterations, iteration_count(solver.workspace))
 
     solver.p .= solution(solver.workspace)
