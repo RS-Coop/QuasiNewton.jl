@@ -126,9 +126,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     #Recurse
     if depth > 1 && r_norm ≥ tol
         step!(solver, stats, Hv, solver.r, r_norm, M; depth=depth-1)
-    end
-
-    if depth == 1
+    else
         push!(stats.r_seq, r_norm)
     end
 
