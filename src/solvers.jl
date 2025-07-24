@@ -42,25 +42,28 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     λ = max(min(1e15, M*g_norm), 1e-15)
 
     #Hermitian Lanczos: Unitary tridiagonalization
-    Q, _, B = hermitian_lanczos(Hv, g, solver.rank, allow_breakdown=true)
+    Q, B, βkp1 = lanczos(Hv, g, solver.rank, allow_breakdown=true)
+    E = eigen!(B)
+
+    # Q, _, B = hermitian_lanczos(Hv, g, solver.rank, allow_breakdown=true)
 
     depth == solver.depth ? push!(stats.krylov_iterations, solver.rank) : stats.krylov_iterations[end] += solver.rank #NOTE: I think, could be OB1
 
-    #Save for residual computation
-    βkp1 = B[solver.rank+1,solver.rank]
+    # #Save for residual computation
+    # βkp1 = B[solver.rank+1,solver.rank]
     
-    #NOTE: This whole process isn't ideal
-    # do a view instead
-    # ideally the output of hermitian_lanczos would already be Julia tridiagonal and not sparsecsc
-    # ideally the output wouldn't have any Nans, or you could check for this in the conversion, or in Krylov
-    # sometimes there are NaNs
-    # sometimes get a LAPACK chklapackerror_positive(::Int64)
+    # #NOTE: This whole process isn't ideal
+    # # do a view instead
+    # # ideally the output of hermitian_lanczos would already be Julia tridiagonal and not sparsecsc
+    # # ideally the output wouldn't have any Nans, or you could check for this in the conversion, or in Krylov
+    # # sometimes there are NaNs
+    # # sometimes get a LAPACK chklapackerror_positive(::Int64)
 
-    B = Tridiagonal(Matrix(B[1:solver.rank,:]))
-    E = eigen(B)
+    # B = Tridiagonal(Matrix(B[1:solver.rank,:]))
+    # E = eigen(B)
 
-    # B = SymTridiagonal(Matrix(B[1:solver.rank,:]))
-    # E = eigen!(B)
+    # # B = SymTridiagonal(Matrix(B[1:solver.rank,:]))
+    # # E = eigen!(B)
 
     #Add and subtract noise to avoid weird LAPACK error
     # d = 1e-4*randn(solver.rank)

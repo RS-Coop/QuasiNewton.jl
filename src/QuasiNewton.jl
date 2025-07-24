@@ -14,6 +14,7 @@ export optimize!
 
 include("stats.jl")
 include("hvp.jl")
+include("lanczos.jl")
 include("solvers.jl")
 include("optimizers.jl")
 include("minimize.jl")
