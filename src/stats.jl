@@ -31,15 +31,16 @@ function Stats(type::Type{<:AbstractFloat})
 end
 
 function Base.show(io::IO, stats::Stats)
-    print(io, "Converged: ", stats.converged, '\n',
-                "Iterations: ", stats.iterations, '\n',
-                "Function Evals: ", stats.f_evals, '\n',
-                "Hvp Evals: ", stats.hvp_evals, '\n',
-                "Run Time (s): ", stats.run_time, '\n',
-                "Minimum: ", stats.f_seq[end], '\n',
-                "Gradient Norm: ", norm(stats.g_seq[end]), '\n',
-                "Avg. Krylov Iterations: ", mean(stats.krylov_iterations), '\n',
-                "Status: ", stats.status, '\n')
+    print(io,   "Converged:               ", stats.converged, '\n',
+                "Iterations:              ", stats.iterations, '\n',
+                "Function Evals:          ", stats.f_evals, '\n',
+                "Hvp Evals:               ", stats.hvp_evals, '\n',
+                "Run Time (s):            ", stats.run_time, '\n',
+                "Minimum:                 ", stats.f_seq[end], '\n',
+                "Gradient Norm:           ", norm(stats.g_seq[end]), '\n',
+                "Max, Avg. Residual Norm: ", maximum(stats.r_seq), " ", mean(stats.r_seq), '\n',
+                "Avg. Krylov Iterations:  ", mean(stats.krylov_iterations), '\n',
+                "Status:                  ", stats.status, '\n')
 end
 
 #=
