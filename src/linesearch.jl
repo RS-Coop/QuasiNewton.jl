@@ -220,9 +220,9 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
         #successful
         else
             success = true
-            # println("Shift: ", opt.solver.shifts[i])
 
             push!(stats.r_seq, norm(statistics(opt.solver.workspace).residuals[i]))
+            push!(stats.λ_seq, opt.solver.shifts[i])
 
             #step
             opt.solver.p .= X[j]

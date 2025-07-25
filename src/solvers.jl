@@ -41,6 +41,8 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
 
+    push!(stats.λ_seq, λ)
+
     #Hermitian Lanczos: Unitary tridiagonalization
     Q, B, βkp1 = lanczos(Hv, g, solver.rank, allow_breakdown=true)
     E = eigen!(B)
