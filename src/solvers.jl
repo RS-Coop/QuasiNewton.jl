@@ -44,7 +44,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     push!(stats.λ_seq, λ)
 
     #Hermitian Lanczos: Unitary tridiagonalization
-    Q, B, βkp1 = lanczos(Hv, g, solver.rank, allow_breakdown=true)
+    Q, B, βkp1 = lanczos(Hv, g, solver.rank, allow_breakdown=true, reorthogonalization=true)
     E = eigen!(B)
 
     # Q, _, B = hermitian_lanczos(Hv, g, solver.rank, allow_breakdown=true)

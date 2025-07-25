@@ -39,7 +39,7 @@ function Base.show(io::IO, stats::Stats)
                 "Run Time (s):            ", stats.run_time, '\n',
                 "Minimum:                 ", stats.f_seq[end], '\n',
                 "Gradient Norm:           ", norm(stats.g_seq[end]), '\n',
-                "Max, Avg. Residual Norm: ", maximum(stats.r_seq; init=NaN), " ", mean(stats.r_seq), '\n',
+                "Max, Avg. Residual Norm: ", maximum(stats.r_seq; init=0.), " ", mean(stats.r_seq), '\n',
                 "Avg. Krylov Iterations:  ", mean(stats.krylov_iterations), '\n',
                 "Status:                  ", stats.status, '\n')
 end
