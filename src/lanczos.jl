@@ -39,8 +39,7 @@ function lanczos(A, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalizati
 			if i ≥ 2
 				vᵢ₋₁ = view(V,:,i-1)
 				βtmp = dot(vᵢ₋₁, q)
-				nzval[pαᵢ-2] += βtmp #?
-				nzval[pαᵢ-1] += βtmp #?
+				dl[i-1] += βtmp
 				axpy!(-βtmp, vᵢ₋₁, q)
 			end
 			αtmp = dot(vᵢ, q)
@@ -62,4 +61,5 @@ function lanczos(A, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalizati
 	end
 
 	return V, SymTridiagonal(d, dl[1:end-1]), dl[end]
+	# return V, Tridiagonal(dl[1:end-1], d, dl[1:end-1]), dl[end]
 end
