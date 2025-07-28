@@ -101,22 +101,24 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
     #Estimate regularization
     #NOTE: Update this with Jensen type inequality
     if isnan(opt.M)
-        ζ = randn(length(x))
-        D = norm(ζ)^2
+        # ζ = randn(length(x))
+        # D = norm(ζ)^2
 
-        g2 = similar(grads)
-        fg!(g2, x+ζ)
+        # g2 = similar(grads)
+        # fg!(g2, x+ζ)
 
-        if any(isnan.(g2))
-            opt.M = 1e15
-        else
-            apply!(ζ, Hv, ζ) 
-            ζ .= g2-grads-ζ
+        # if any(isnan.(g2))
+        #     opt.M = 1e15
+        # else
+        #     apply!(ζ, Hv, ζ) 
+        #     ζ .= g2-grads-ζ
 
-            opt.M = min(1e8, 2*norm(ζ)/(D))
-        end
+        #     opt.M = min(1e8, 2*norm(ζ)/(D))
+        # end
 
-        g2 = nothing #mark for collection
+        # g2 = nothing #mark for collection
+
+        opt.M = inv(g_norm)
     end
 
     #Tolerance

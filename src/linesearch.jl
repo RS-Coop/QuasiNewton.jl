@@ -13,7 +13,7 @@ function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
     
     #Setup
     p = opt.solver.p
-    success = true
+    status = true
 
     function ϕ(t)
         stats.f_evals += 1
@@ -39,7 +39,7 @@ function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
 
     # opt.M = α == 1. ? 2*opt.M : max(min(1e8, opt.M/α^2), 1e-8) #Tried this, but it didn't work that well
 
-    return success
+    return status
 end
 
 ########################################################
@@ -66,7 +66,7 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     #Setup
     p = opt.solver.p
     p_norm = norm(p)
-    success = true
+    status = true
     λ = max(min(1e15, opt.M*g_norm), 1e-15)
 
     if opt.M == 0.
@@ -89,13 +89,13 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
 
     #Check search direction
     if p_norm < sqrt(eps(T))
-        success = false
+        status = false
         # stats.status = "Search direction too small"
         opt.M = 1e-8
     end
 
     #NOTE: Can we just iteratively update x, is that even that much better?
-    while success
+    while status
         stats.f_evals += 1
 
         if f(x+p)-fval ≤ dec
@@ -112,14 +112,14 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
 
         #Check step-size
         if η < sqrt(eps(T))
-            success = false
+            status = false
             # stats.status = "Linesearch failed"
             opt.M = 1.0
         end
     end
 
     #Fallback to basic backtracking if linesearch failed
-    return success || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
@@ -140,7 +140,7 @@ function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::
     #Setup
     p = opt.solver.p
     p_norm = norm(p)
-    success = true
+    status = true
     λ = max(min(1e15, opt.M*g_norm), 1e-15)
 
     #Test search direction
@@ -159,7 +159,7 @@ function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::
     end
 
     #Fallback to basic backtracking if linesearch failed
-    return success || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
@@ -184,21 +184,21 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
         return fval + dot(g,d) + 0.5*dot(d, res)
     end
 
-    success = false
+    status = false
     shift_failure = false
     M_new = opt.M
     
     i = findfirst(opt.solver.workspace.converged)
 
     if i === nothing
-        return success
+        return status
     end
 
     X = solution(opt.solver.workspace)
 
     j = argmin(abs.(opt.M*opt.solver.shifts[i:end]-norm.(X[i:end]))) + i-1
 
-    while !success && !shift_failure
+    while !status && !shift_failure
         stats.f_evals += 1
 
         ρ = (fval - f(x + X[j]))/(fval - cubic_subprob(X[j]))
@@ -219,10 +219,10 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
             
         #successful
         else
-            success = true
+            status = true
 
-            push!(stats.r_seq, norm(statistics(opt.solver.workspace).residuals[i]))
-            push!(stats.λ_seq, opt.solver.shifts[i])
+            push!(stats.r_seq, opt.solver.workspace.rNorms[j])
+            push!(stats.λ_seq, opt.solver.shifts[j])
 
             #step
             opt.solver.p .= X[j]
@@ -238,7 +238,7 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
 
     opt.M = min(M_new, 1e15)
 
-    return success
+    return status
 end
 
 ########################################################

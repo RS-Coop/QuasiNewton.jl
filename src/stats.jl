@@ -4,6 +4,7 @@ Author: Cooper Simpson
 SFN optimizer stats
 =#
 
+using Printf
 using Statistics: mean
 
 export Stats
@@ -32,16 +33,16 @@ function Stats(type::Type{<:AbstractFloat})
 end
 
 function Base.show(io::IO, stats::Stats)
-    print(io,   "Converged:               ", stats.converged, '\n',
-                "Iterations:              ", stats.iterations, '\n',
-                "Function Evals:          ", stats.f_evals, '\n',
-                "Hvp Evals:               ", stats.hvp_evals, '\n',
-                "Run Time (s):            ", stats.run_time, '\n',
-                "Minimum:                 ", stats.f_seq[end], '\n',
-                "Gradient Norm:           ", norm(stats.g_seq[end]), '\n',
-                "Max, Avg. Residual Norm: ", maximum(stats.r_seq; init=0.), " ", mean(stats.r_seq), '\n',
-                "Avg. Krylov Iterations:  ", mean(stats.krylov_iterations), '\n',
-                "Status:                  ", stats.status, '\n')
+    @printf(io, "Converged:              %9s\n", stats.converged)
+    @printf(io, "Iterations:             %9d\n", stats.iterations)
+    @printf(io, "Function Evals:         %9d\n", stats.f_evals)
+    @printf(io, "Hvp Evals:              %9d\n", stats.hvp_evals)
+    @printf(io, "Run Time (s):           %9.2e\n", stats.run_time)
+    @printf(io, "Minimum:                %9.3e\n", stats.f_seq[end])
+    @printf(io, "Gradient Norm:          %9.3e\n", norm(stats.g_seq[end]))
+    @printf(io, "Max/Avg. Residual Norm: %9.3e, %.3e\n", maximum(stats.r_seq; init=0.), mean(stats.r_seq))
+    @printf(io, "Avg. Krylov Iterations: %9.3e\n", mean(stats.krylov_iterations))
+    @printf(io, "Status:                 %s\n", stats.status)
 end
 
 #=

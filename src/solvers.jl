@@ -36,7 +36,7 @@ function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank
     return LFASolver(rank, min_rank, max_rank, depth, type(undef, dim), type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::Float64=Inf, depth::Int=solver.depth) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::Float64=Inf, depth::Int=solver.depth, tol::T=NaN) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     
     #Regularization
     λ = max(min(1e15, M*g_norm), 1e-15)
@@ -46,12 +46,12 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     #Hermitian Lanczos: Unitary tridiagonalization
     Q, B, βₖ₊₁ = lanczos(Hv, g, solver.rank, allow_breakdown=true, reorthogonalization=false)
 
-    # E = eigen(B)
+    E = eigen(B)
 
     #Add and subtract noise to avoid weird LAPACK error
-    d = 1e-6*randn(solver.rank)
-    E = eigen!(B + Diagonal(d))
-    E.values .-= d
+    # d = 1e-6*randn(solver.rank)
+    # E = eigen!(B + Diagonal(d))
+    # E.values .-= d
 
     depth == solver.depth ? push!(stats.krylov_iterations, solver.rank) : stats.krylov_iterations[end] += solver.rank #NOTE: I think, could be OB1
 
@@ -84,13 +84,15 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     r_norm = norm(solver.r)
 
     #Tolerance
-    ζ = 0.5
-    ξ = T(0.01)
+    if isnan(tol)
+        ζ = 0.5
+        ξ = T(0.01)
 
-    atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
-    rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
+        atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
+        rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
 
-    tol = atol + g_norm*rtol
+        tol = atol + g_norm*rtol
+    end
     
     #Rank change
     if solver.min_rank != solver.max_rank
@@ -105,7 +107,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
 
     #Recurse
     if depth > 1 && r_norm ≥ tol
-        step!(solver, stats, Hv, solver.r, r_norm, M; depth=depth-1)
+        step!(solver, stats, Hv, solver.r, r_norm, M; depth=depth-1, tol=tol)
     else
         push!(stats.r_seq, r_norm)
     end
@@ -305,7 +307,7 @@ function step!(solver::ARCSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     end
 
     #Solve subproblem
-    krylov_solve!(solver.workspace, Hv, -g, solver.shifts, itmax=solver.krylov_order, timemax=time_limit, check_curvature=true, atol=cg_atol, rtol=cg_rtol, callback=cb)
+    krylov_solve!(solver.workspace, Hv, -g, solver.shifts, itmax=solver.krylov_order, timemax=time_limit, check_curvature=true, atol=cg_atol, rtol=cg_rtol, callback=cb, history=true)
 
     push!(stats.krylov_iterations, iteration_count(solver.workspace))
 

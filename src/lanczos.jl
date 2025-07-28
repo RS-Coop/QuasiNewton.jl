@@ -60,6 +60,6 @@ function lanczos(A, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalizati
 		dl[i] = βᵢ₊₁ #Tᵢ₊₁.ᵢ = βᵢ₊₁
 	end
 
-	return V, SymTridiagonal(d, dl[1:end-1]), dl[end]
-	# return V, Tridiagonal(dl[1:end-1], d, dl[1:end-1]), dl[end]
+	# return V, SymTridiagonal(d, dl[1:end-1]), dl[end]
+	return V, Tridiagonal(dl[1:end-1], d, dl[1:end-1]), dl[end]
 end
