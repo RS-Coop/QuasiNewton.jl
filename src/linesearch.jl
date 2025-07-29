@@ -67,10 +67,10 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     p = opt.solver.p
     p_norm = norm(p)
     status = true
-    λ = max(min(1e15, opt.M*g_norm), 1e-15)
+    λ = max(min(1e16, opt.M*g_norm), 1e-16)
 
-    if opt.M == 0.
-        backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    if iszero(opt.M)
+        return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
     end
 
     #Test search direction, select negative gradient if too small
@@ -114,7 +114,7 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
         if η < sqrt(eps(T))
             status = false
             # stats.status = "Linesearch failed"
-            opt.M = 1.0
+            opt.M = 1e-8
         end
     end
 

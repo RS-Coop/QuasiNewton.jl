@@ -41,6 +41,7 @@ function Base.show(io::IO, stats::Stats)
     @printf(io, "Minimum:                %9.3e\n", stats.f_seq[end])
     @printf(io, "Gradient Norm:          %9.3e\n", norm(stats.g_seq[end]))
     @printf(io, "Max/Avg. Residual Norm: %9.3e, %.3e\n", maximum(stats.r_seq; init=0.), mean(stats.r_seq))
+    @printf(io, "Max/Avg. Regularization: %9.3e, %.3e\n", maximum(stats.λ_seq; init=0.), mean(stats.λ_seq))
     @printf(io, "Avg. Krylov Iterations: %9.3e\n", mean(stats.krylov_iterations))
     @printf(io, "Status:                 %s\n", stats.status)
 end

@@ -39,7 +39,7 @@ end
 function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::Float64=Inf, depth::Int=solver.depth, tol::T=NaN) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
     
     #Regularization
-    λ = max(min(1e15, M*g_norm), 1e-15)
+    λ = iszero(M) ? 0. : max(min(1e16, M*g_norm), 1e-16)
 
     push!(stats.λ_seq, λ)
 
