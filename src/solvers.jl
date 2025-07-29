@@ -96,10 +96,10 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     
     #Rank change
     if solver.min_rank != solver.max_rank
-        if r_norm ≥ tol
+        if r_norm ≥ tol && depth == 1
             # println("Rank increase...")
             solver.rank = min(solver.max_rank, solver.rank*2)
-        elseif r_norm ≤ 1e-2*tol
+        elseif r_norm ≤ 1e-2*tol && depth == solver.depth
             # println("Rank decrease...")
             solver.rank = max(solver.min_rank, div(solver.rank, 2))
         end
@@ -107,6 +107,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
 
     #Recurse
     if depth > 1 && r_norm ≥ tol
+        # println("Resolve")
         step!(solver, stats, Hv, solver.r, r_norm, M; depth=depth-1, tol=tol)
     else
         push!(stats.r_seq, r_norm)
