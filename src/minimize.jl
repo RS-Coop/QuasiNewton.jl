@@ -132,6 +132,8 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
     #Iterate
     while iterations<itmax+1
 
+        # println("Iteration: ", iterations+1)
+
         #Check gradient norm
         if g_norm <= tol
             converged = true

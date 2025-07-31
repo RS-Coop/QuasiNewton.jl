@@ -18,14 +18,13 @@ mutable struct LFASolver{I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}}
     const max_rank::I #maximum rank
     const depth::I #recursion_depth
     p::S #search direction
-    r::S #residual
 end
 
 function hvp_power(solver::LFASolver)
     return 1
 end
 
-function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(log(dim)))), adapt::Bool=true, min_rank::I=1, max_rank::I=1000, depth::I=1) where {I<:Integer, T<:AbstractFloat}
+function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank::I=min(dim, Int(ceil(log(dim)))), adapt::Bool=true, min_rank::I=2, max_rank::I=1000, depth::I=1) where {I<:Integer, T<:AbstractFloat}
 
     if adapt
         min_rank, max_rank = min_rank, min(dim, max_rank)
@@ -33,11 +32,11 @@ function LFASolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, rank
         min_rank, max_rank = rank, rank
     end
 
-    return LFASolver(rank, min_rank, max_rank, depth, type(undef, dim), type(undef, dim))
+    return LFASolver(rank, min_rank, max_rank, depth, type(undef, dim))
 end
 
 function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::Float64=Inf, depth::Int=solver.depth, tol::T=NaN) where {T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-    
+
     #Regularization
     λ = iszero(M) ? 0. : max(min(1e16, M*g_norm), 1e-16)
 
@@ -79,9 +78,9 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
     z = dot(E.vectors[solver.rank,:], cache1)
 
-    @views @. solver.r = -g_norm*βₖ₊₁*z*Q[:,solver.rank+1]
+    @views r = -g_norm*βₖ₊₁*z*Q[:,solver.rank+1]
 
-    r_norm = norm(solver.r)
+    r_norm = norm(r)
 
     #Tolerance
     if isnan(tol)
@@ -108,7 +107,7 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     #Recurse
     if depth > 1 && r_norm ≥ tol
         # println("Resolve")
-        step!(solver, stats, Hv, solver.r, r_norm, M; depth=depth-1, tol=tol)
+        step!(solver, stats, Hv, r, r_norm, M; depth=depth-1, tol=tol)
     else
         push!(stats.r_seq, r_norm)
     end
