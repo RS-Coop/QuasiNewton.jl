@@ -47,7 +47,12 @@ end
 ########################################################
 
 function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-    return search_η!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    
+    if iszero(opt.M)
+        return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    end
+    
+    return search_M!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################
@@ -70,10 +75,6 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     p_norm = norm(p)
     status = true
     λ = max(min(1e16, opt.M*g_norm), 1e-16)
-
-    if iszero(opt.M)
-        return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
-    end
 
     #Test search direction, select negative gradient if too small
     p_norm = norm(opt.solver.p)
@@ -152,16 +153,18 @@ function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     if p_norm ≥ eps(T) && f(x+p)-fval ≤ dec #success
-        opt.M = max(opt.α*opt.M, 1e-8) #decrease regularization
+        opt.M = max(opt.M/2, 1e-8) #decrease regularization
 
     else #failure
-        opt.M = min(opt.M/opt.α, 1e8) #increase regularization
+        opt.M = min(opt.M*2, 1e8) #increase regularization
 
         opt.solver.p .= zero(T)
+
+        # status = false #NOTE: Not setting this to false, as we don't want to exit
     end
 
     #Fallback to basic backtracking if linesearch failed
-    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    return status # || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv) #NOTE: Not doing any other linesearch
 end
 
 ########################################################
