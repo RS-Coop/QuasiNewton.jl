@@ -12,7 +12,7 @@ using LinearAlgebra
 
 export optimize!
 
-include("stats.jl")
+include("utilities.jl")
 include("hvp.jl")
 include("lanczos.jl")
 include("solvers.jl")

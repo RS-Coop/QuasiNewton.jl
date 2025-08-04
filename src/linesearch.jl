@@ -58,76 +58,6 @@ end
 ########################################################
 
 #=
-In place SFN step-size line-search
-
-Input:
-    x :: current iterate
-    p :: search direction
-    f :: scalar valued function
-    fval :: current function value
-    λ :: regularization
-    α :: float in (0,1)
-=#
-function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-
-    #Setup
-    p = opt.solver.p
-    p_norm = norm(p)
-    status = true
-    λ = max(min(1e16, opt.M*g_norm), 1e-16)
-
-    #Test search direction, select negative gradient if too small
-    p_norm = norm(opt.solver.p)
-    # println("Search norm: ", p_norm)
-    
-    #Increase step-size
-    η = 2.0
-
-    #Scale search direction and norm
-    p .*= η
-    p_norm *= η 
-    
-    #Target decrement
-    dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
-
-    #Check search direction
-    if p_norm < sqrt(eps(T))
-        status = false
-        # stats.status = "Search direction too small"
-        opt.M = 1e-8
-    end
-
-    #NOTE: Can we just iteratively update x, is that even that much better?
-    while status
-        stats.f_evals += 1
-
-        if f(x+p)-fval ≤ dec
-            #Update regularization
-            # println("Accepted η: ", η)
-            opt.M = max(min(1e8, opt.M/η^2), 1e-8)
-            # println("Update M: ", opt.M)
-            break
-        else
-            η *= opt.α #reduce step-size
-            p .*= opt.α #scale search direction
-            dec *= opt.α^2 #scale decrement
-        end
-
-        #Check step-size
-        if η < sqrt(eps(T))
-            status = false
-            # stats.status = "Linesearch failed"
-            opt.M = 1e-8
-        end
-    end
-
-    #Fallback to basic backtracking if linesearch failed
-    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
-end
-
-########################################################
-
-#=
 In place SFN regularization line-search
 
 Input:
@@ -163,8 +93,72 @@ function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::
         # status = false #NOTE: Not setting this to false, as we don't want to exit
     end
 
+    return status
+end
+
+########################################################
+
+#=
+In place SFN step-size line-search
+
+Input:
+    x :: current iterate
+    p :: search direction
+    f :: scalar valued function
+    fval :: current function value
+    λ :: regularization
+    α :: float in (0,1)
+=#
+function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+
+    #Setup
+    p = opt.solver.p
+    p_norm = norm(p)
+    status = true
+    λ = max(min(1e16, opt.M*g_norm), 1e-16)
+
+    #Test search direction, select negative gradient if too small
+    p_norm = norm(opt.solver.p)
+    
+    #Increase step-size
+    η = 2.0
+
+    #Scale search direction and norm
+    p .*= η
+    p_norm *= η 
+    
+    #Target decrement
+    dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
+
+    #Check search direction
+    if p_norm < sqrt(eps(T))
+        status = false
+        opt.M = 1e-8
+    end
+
+    #NOTE: Can we just iteratively update x, is that even that much better?
+    while status
+        stats.f_evals += 1
+
+        if f(x+p)-fval ≤ dec
+            #Update regularization
+            opt.M = max(min(1e8, opt.M/η^2), 1e-8)
+            break
+        else
+            η *= opt.α #reduce step-size
+            p .*= opt.α #scale search direction
+            dec *= opt.α^2 #scale decrement
+        end
+
+        #Check step-size
+        if η < sqrt(eps(T))
+            status = false
+            opt.M = 1e-8
+        end
+    end
+
     #Fallback to basic backtracking if linesearch failed
-    return status # || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv) #NOTE: Not doing any other linesearch
+    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end
 
 ########################################################

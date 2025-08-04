@@ -13,6 +13,109 @@ using Arpack: eigs
 
 ########################################################
 
+#=
+Shifted CG Lanczos with Gauss-Laguerre quadrature.
+=#
+mutable struct GLKSolver{T<:AbstractFloat, I<:Integer, S<:AbstractVector{T}, W<:KrylovWorkspace}
+    workspace::W #Krylov workspace
+    const krylov_order::I #maximum Krylov subspace size
+    const quad_nodes::S #quadrature nodes
+    const quad_weights::S #quadrature weights
+    p::S #search direction
+end
+
+function hvp_power(solver::GLKSolver)
+    return 2
+end
+
+function GLKSolver(dim::I; type::Type{<:AbstractVector{T}}=Vector{Float64}, quad_order::I=61, krylov_order::I=0) where {I<:Integer, T<:AbstractFloat}
+
+    #Quadrature
+    nodes, weights = gausslaguerre(quad_order, 0.0, reduced=true)
+
+    if length(nodes) < quad_order
+        quad_order = length(nodes)
+        println("Quadrature weight precision reached, using $(quad_order) quadrature locations.")
+    end
+
+    #=
+    Global operations
+    - Integral constant
+    - Rescaling weights
+    - Squaring nodes
+    =#
+    @. weights = (2.0/pi)*weights*exp(nodes)
+    @. nodes = nodes^2
+
+    #Krylov workspace
+    workspace = krylov_workspace(Val(:cg_lanczos_shift), dim, dim, quad_order, type)
+    if krylov_order == -1
+        krylov_order = dim
+    elseif krylov_order == -2
+        krylov_order = Int(ceil(log(dim)))
+    end
+
+    return GLKSolver(workspace, krylov_order, T.(nodes), T.(weights), type(undef, dim))
+end
+
+function step!(solver::GLKSolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector, H<:HvpOperator}
+    
+    #Regularization
+    λ = max(min(1e15, M*g_norm), 1e-15)
+
+    #Reset search direction
+    solver.p .= 0.0
+
+    #Quadrature scaling factor
+    # β = eigmax(Hv, tol=1e-6)
+    β = eigmean(Hv)
+
+    #Preconditioning
+    P = I
+
+    # E = eigen(Matrix(Hv))
+    # @. E.values = pinv(E.values)
+    # P = Matrix(E)
+
+    # k = Int(ceil(log(size(Hv, 1))))
+    # r = Int(ceil(1.5*k))
+    # P = NystromPreconditionerInverse(NystromSketch(Hv, k, r), 0)
+
+    #Shifts
+    shifts = β*solver.quad_nodes .+ λ
+    
+    #Tolerance
+    cg_atol = sqrt(eps(T))
+    cg_rtol = sqrt(eps(T))
+
+    # ζ = 0.5
+    # ξ = T(0.01)
+
+    # cg_atol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(1+ζ)))
+    # cg_rtol = max(sqrt(eps(T)), min(ξ, ξ*g_norm^(ζ)))
+
+    #CG solves
+    krylov_solve!(solver.workspace, Hv, -g, shifts, M=P, itmax=solver.krylov_order, timemax=time_limit, atol=cg_atol, rtol=cg_rtol)
+
+    # converged = sum(solver.workspace.converged)
+    # if converged != length(shifts)
+    #     println("WARNING: Solver failed, only ", converged, " converged")
+    # end
+
+    push!(stats.krylov_iterations, iteration_count(solver.workspace))
+
+    #Update search direction
+    for i in eachindex(shifts)
+        @inbounds solver.p .+= solver.quad_weights[i]*solution(solver.workspace)[i]
+    end
+
+    solver.p .*= sqrt(β)
+
+    return
+end
+
+########################################################
+
 # #=
 # Shifted and scaled CG Lanczos with Gauss-Chebyshev quadrature.
 # =#
