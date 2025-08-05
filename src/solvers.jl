@@ -57,7 +57,9 @@ function step!(solver::LFASolver, stats::Stats, Hv::H, g::S, g_norm::T, M::T; ti
     #Hermitian Lanczos: Unitary tridiagonalization
     Q, B, βₖ₊₁ = lanczos(Hv, g, solver.rank, allow_breakdown=true, reorthogonalization=false)
 
-    E = eigen(B)
+    # E = eigen(B)
+    # E = Eigen(LAPACK.stegr!('V', B.dv, B.ev)...)
+    E = Eigen(LAPACK.stev!('V', B.dv, B.ev)...)
 
     #Add and subtract noise to avoid weird LAPACK error
     # d = 1e-6*randn(solver.rank)
