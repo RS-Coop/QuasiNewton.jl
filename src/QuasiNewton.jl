@@ -9,8 +9,11 @@ module QuasiNewton
 Setup
 =#
 using LinearAlgebra
+using LinearOperators
+using DifferentiationInterface: prepare_gradient, prepare_hvp_same_point, value_and_gradient!, hvp!
+using Krylov: KrylovWorkspace, krylov_workspace, krylov_solve!, iteration_count, issolved, solution, statistics
 
-export optimize!
+export optimize!, rsfn!, arc!, newton!
 
 include("utilities.jl")
 include("hvp.jl")
@@ -24,88 +27,96 @@ include("linesearch.jl")
 High-level interfaces
 =#
 
-function optimize!(x::S, f::F; optimizer::Symbol, itmax::I, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6, kwargs...) where {I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}, F<:Function}
-	if optimizer == :rsfn
-		opt = SFNOptimizer(size(x,1), mode, M=M, linesearch=linesearch, atol=atol, rtol=rtol)
+function optimize!(x::S, f::F, optimizer::Symbol, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}, F<:Function}
+	if optimizer == :newton
+		opt = NewtonOptimizer(size(x,1); kwargs...) 
+	elseif optimizer == :rsfn
+		opt = RSFNOptimizer(size(x,1); kwargs...)
 	elseif optimizer == :arc
-		opt = ARCOptimizer(size(x,1), atol=atol, rtol=rtol)
-	elseif optimizer == :newton
-		opt = NewtonOptimizer(size(x,1), linesearch=linesearch, atol=atol, rtol=rtol)
+		opt = ARCOptimizer(size(x,1); kwargs...)
 	else
 		throw(ArgumentError("invalid optimizer"))
 	end
 
-	stats = minimize!(opt, x, f, itmax=itmax, time_limit=time_limit)
+	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
 
-function optimize!(x::S, f::F1, fg!::F2, H::F3; itmax::I, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6, kwargs...) where {I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, F3<:Function}
-	if mode == :rsfn
-		opt = SFNOptimizer(size(x,1), mode, M=M, linesearch=linesearch, atol=atol, rtol=rtol)
-	elseif mode == :arc
-		opt = ARCOptimizer(size(x,1), atol=atol, rtol=rtol)
-	elseif mode == :newton
-		opt = NewtonOptimizer(size(x,1), linesearch=linesearch, atol=atol, rtol=rtol)
+function optimize!(x::S, f::F1, fg!::F2, H::M, optimizer::Symbol; itmax::I=1000, time_limit::T=Inf, kwargs...) where {I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, M}
+	if optimizer == :newton
+		opt = NewtonOptimizer(size(x,1); kwargs...)
+	elseif optimizer == :rsfn
+		opt = RSFNOptimizer(size(x,1); kwargs...)
+	elseif optimizer == :arc
+		opt = ARCOptimizer(size(x,1); kwargs...)
 	else
-		throw(ArgumentError("invalid mode"))
+		throw(ArgumentError("invalid optimizer"))
 	end
 
-	stats = minimize!(opt, x, f, fg!, H, itmax=itmax, time_limit=time_limit)
-
-	return stats
-end
-
-#R-SFN
-function rsfn!(x::S, f::F; mode::Symbol=:LFASolver, itmax::I=1000, time_limit::T2=Inf, M::T1=1e-8, atol::T2=1e-5, rtol::T2=1e-6, linesearch::Bool=false, kwargs...) where {T1<:Real, T2<:AbstractFloat, S<:AbstractVector{T2}, F, I}
-	opt = SFNOptimizer(size(x,1), mode; M=M, linesearch=linesearch, atol=atol, rtol=rtol, kwargs...)
-
-	stats = minimize!(opt, x, f, itmax=itmax, time_limit=time_limit)
-
-	return stats
-end
-
-function rsfn!(x::S, f::F1, fg!::F2, H::L; mode::Symbol=:LFASolver, itmax::I=1000, time_limit::T2=Inf, M::T1=1e-8, atol::T2=1e-5, rtol::T2=1e-6, linesearch::Bool=false, kwargs...) where {T1<:Real, T2<:AbstractFloat, S<:AbstractVector{T2}, F1, F2, L, I}
-	opt = SFNOptimizer(size(x,1), mode; M=M, linesearch=linesearch, atol=atol, rtol=rtol, kwargs...)
-
-	stats = minimize!(opt, x, f, fg!, H, itmax=itmax, time_limit=time_limit)
-
-	return stats
-end
-
-#ARC
-function arc!(x::S, f::F; itmax::I=1000, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
-	opt = ARCOptimizer(size(x,1), atol=atol, rtol=rtol)
-
-	stats = minimize!(opt, x, f; itmax=itmax, time_limit=time_limit)
-
-	return stats
-end
-
-function arc!(x::S, f::F1, fg!::F2, H::L; itmax::I=1000, time_limit::T=Inf, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, L, I}
-	opt = ARCOptimizer(size(x,1), atol=atol, rtol=rtol)
-
 	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
 
+#########################################################
 #Newton
-function newton!(x::S, f::F; itmax::I=1000, time_limit::T=Inf, posdef::Bool=false, linesearch::Bool=false, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
-	opt = NewtonOptimizer(size(x,1), posdef=posdef, linesearch=linesearch, atol=atol, rtol=rtol)
 
-	stats = minimize!(opt, x, f; itmax=itmax, time_limit=time_limit)
+function newton!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
+	opt = NewtonOptimizer(size(x,1); kwargs...)
+
+	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
 
-function newton!(x::S, f::F1, fg!::F2, H::L; itmax::I=1000, time_limit::T=Inf, posdef::Bool=false, linesearch::Bool=false, atol::T=1e-5, rtol::T=1e-6) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, L, I}
-	opt = NewtonOptimizer(size(x,1), posdef=posdef, linesearch=linesearch, atol=atol, rtol=rtol)
+function newton!(x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, M, I}
+	opt = NewtonOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
 
 	return stats
 end
+
+#########################################################
+#R-SFN
+
+function rsfn!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
+	opt = RSFNOptimizer(size(x,1); kwargs...)
+
+	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
+
+	return stats
+end
+
+function rsfn!(x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, M, I}
+	opt = RSFNOptimizer(size(x,1); kwargs...)
+
+	stats = minimize!(opt, x, f, fg!, H, itmax=itmax, time_limit=time_limit)
+
+	return stats
+end
+
+#########################################################
+#ARC
+
+function arc!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
+	opt = ARCOptimizer(size(x,1); kwargs...)
+
+	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
+
+	return stats
+end
+
+function arc!(x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, M, I}
+	opt = ARCOptimizer(size(x,1); kwargs...)
+
+	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
+
+	return stats
+end
+
+#########################################################
 
 #=
 If optional packages are loaded then export compatible functions.

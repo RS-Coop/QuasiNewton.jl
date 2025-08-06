@@ -1,7 +1,9 @@
 #=
+Author: Cooper Simpson
+
 Adapted from Krylov.jl (src/krylov_processes.jl)
 =#
-function lanczos(A, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {T<:AbstractFloat, S<:AbstractVector{T}}
+function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {T<:AbstractFloat, S<:AbstractVector{T}, M<:AbstractMatrix{T}}
 	m, n = size(A)
 
 	β₁ = zero(T)
@@ -61,5 +63,4 @@ function lanczos(A, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalizati
 	end
 
 	return V, SymTridiagonal(d, dl[1:end-1]), dl[end]
-	# return V, Tridiagonal(dl[1:end-1], d, dl[1:end-1]), dl[end]
 end

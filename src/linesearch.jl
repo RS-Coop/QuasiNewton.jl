@@ -5,11 +5,10 @@ Line-search procedures.
 =#
 
 using LineSearches: BackTracking
-using Krylov: statistics
 
 ########################################################
 
-function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
     
     #Setup
     p = opt.solver.p
@@ -46,13 +45,13 @@ end
 
 ########################################################
 
-function search!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function search!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
     
     if iszero(opt.M)
-        return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+        return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, H)
     end
     
-    return search_M!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    return search_M!(opt, stats, x, f, fg!, fval, g, g_norm, H)
 end
 
 ########################################################
@@ -68,13 +67,13 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_M!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function search_M!(opt::RSFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
     p_norm = norm(p)
     status = true
-    λ = max(min(1e15, opt.M*g_norm), 1e-15)
+    λ = max(min(1e16, opt.M*g_norm), 1e-16)
 
     #Test search direction
     p_norm = norm(opt.solver.p)
@@ -109,7 +108,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function search_η!(opt::RSFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
@@ -158,7 +157,7 @@ function search_η!(opt::SFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     end
 
     #Fallback to basic backtracking if linesearch failed
-    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
+    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, H)
 end
 
 ########################################################
@@ -174,12 +173,12 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
+function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
     
     #Cubic sub-problem
     cubic_subprob = (d) -> begin
         res = similar(g)
-        mul!(res, Hv, d)
+        mul!(res, H, d)
         return fval + dot(g,d) + 0.5*dot(d, res)
     end
 
@@ -235,24 +234,7 @@ function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T,
         end
     end
 
-    opt.M = min(M_new, 1e15)
+    opt.M = min(M_new, 1e16)
 
     return status
-end
-
-########################################################
-
-#=
-In place Newton step-size line-search
-
-Input:
-    x :: current iterate
-    p :: search direction
-    f :: scalar valued function
-    fval :: current function value
-    λ :: regularization
-    α :: float in (0,1)
-=#
-function search!(opt::NewtonOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, Hv::H) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, H<:HvpOperator}
-    return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, Hv)
 end

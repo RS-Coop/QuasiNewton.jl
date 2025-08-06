@@ -4,8 +4,7 @@ Author: Cooper Simpson
 SFN optimizer.
 =#
 
-using Zygote: pullback
-using Enzyme: make_zero!, ReverseWithPrimal
+#########################################################
 
 #=
 Repeatedly applies the SFN iteration to minimize the function.
@@ -17,36 +16,20 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function minimize!(opt::O, x::S, f::F; itmax::I=1000, time_limit::T2=Inf) where {O<:Optimizer, T1<:AbstractFloat, S<:AbstractVector{T1}, T2, F<:Function, I<:Integer}
-    #Setup hvp operator
+function minimize!(opt::O, x::S, f::F, ad_backend; itmax::I=1000, time_limit::T2=Inf) where {O<:Optimizer, T1<:AbstractFloat, S<:AbstractVector{T1}, T2, F<:Function, I<:Integer}
+    #Autodiff
+    H = ADHvpOperator(f, x, ad_backend)
 
-    #NEW: Using Enzyme
-    Hv = EHvpOperator(f, x, power=hvp_power(opt.solver))
+    prep = prepare_gradient(f, ad_backend, x)
+    fg! = (g,x) -> value_and_gradient!(f, g, prep, ad_backend, x)
 
-    function fg!(grads::S, x::S)
-        make_zero!(grads)
-
-        _, fval = autodiff(ReverseWithPrimal, f, Active, Duplicated(x, grads))
-
-        return fval
-    end
-
-    #OLD: Using Zygote
-    # Hv = RHvpOperator(f, x, power=hvp_power(opt.solver))
-    
-    # function fg!(grads::S, x::S)
-        
-    #     fval, back = let f=f; pullback(f, x) end
-    #     grads .= back(one(fval))[1]
-
-    #     return fval
-    # end
-
-    #iterate
-    stats = iterate!(opt, x, f, fg!, Hv, itmax, time_limit)
+    #Iterate
+    stats = iterate!(opt, x, f, fg!, H, itmax, time_limit)
 
     return stats
 end
+
+#########################################################
 
 #=
 Repeatedly applies the SFN iteration to minimize the function.
@@ -60,15 +43,17 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function minimize!(opt::O, x::S, f::F1, fg!::F2, H::F3; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, F3<:Function, I<:Integer}
-    #Setup hvp operator
-    Hv = LHvpOperator(H, x, power=hvp_power(opt.solver))
+function minimize!(opt::O, x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, M<:AbstractMatrix{T}, I<:Integer}
+    #LinearOperator
+    H = LHvpOperator(H, x)
 
     #iterate
-    stats = iterate!(opt, x, f, fg!, Hv, itmax, time_limit)
+    stats = iterate!(opt, x, f, fg!, H, itmax, time_limit)
 
     return stats
 end
+
+#########################################################
 
 #=
 Repeatedly applies the SFN iteration to minimize the function.
@@ -78,11 +63,11 @@ Input:
     x :: initialization
     f :: scalar valued function
     fg! :: compute f and gradient norm after inplace update of gradient
-    Hv :: hvp operator
+    H :: hvp operator
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, H<:HvpOperator, I<:Integer}
+function iterate!(opt::O, x::S, f::F1, fg!::F2, H::L, itmax::I, time_limit::T) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, L<:LinearOperator, I<:Integer}
     #Start time
     tic = time_ns()
     
@@ -109,7 +94,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
         if any(isnan.(g2))
             opt.M = 1e-8
         else
-            apply!(ζ, Hv, ζ) 
+            apply!(ζ, H, ζ) 
             ζ .= g2-grads-ζ
 
             opt.M = min(1e8, 2*norm(ζ)/(D))
@@ -126,7 +111,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
     push!(stats.g_seq, g_norm)
 
     #Iterate
-    while iterations<itmax+1
+    while iterations ≤ itmax
 
         #Check gradient norm
         if g_norm <= tol
@@ -151,10 +136,10 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
         opt.solver.p .= zero(eltype(opt.solver.p))
 
         #Solve for search direction
-        step!(opt.solver, stats, Hv, grads, g_norm, opt.M; time_limit=time_limit-time)
+        step!(opt.solver, stats, H, grads, g_norm, opt.M; time_limit=time_limit-time)
 
         #Linesearch
-        if opt.linesearch && !search!(opt, stats, x, f, fg!, fval, grads, g_norm, Hv)
+        if opt.linesearch && !search!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
             stats.status = "Linesearch failure"
             break
         else
@@ -171,7 +156,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
         push!(stats.g_seq, g_norm)
 
         #Update Hvp operator
-        update!(Hv, x)
+        update!(H, x)
 
         #Increment
         iterations += 1
@@ -181,7 +166,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, Hv::H, itmax::I, time_limit::T) 
     stats.converged = converged
     stats.iterations = iterations
     stats.f_evals += iterations+1
-    stats.hvp_evals = Hv.nprod
+    stats.hvp_evals = H.nprod
     stats.run_time = elapsed(tic)
 
     return stats
