@@ -23,9 +23,8 @@ include("optimizers.jl")
 include("minimize.jl")
 include("linesearch.jl")
 
-#=
-High-level interfaces
-=#
+#########################################################
+#High-level interfaces
 
 function optimize!(x::S, f::F, optimizer::Symbol, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}, F<:Function}
 	if optimizer == :newton
@@ -117,6 +116,8 @@ function arc!(x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf, kwar
 end
 
 #########################################################
+
+using Requires
 
 #=
 If optional packages are loaded then export compatible functions.

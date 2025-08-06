@@ -6,6 +6,9 @@ Doing the diagonal perturbation seems to mostly help, but it can alter the resul
 
 With noise 1e-6, there are only a couple of problem failures.
 
+# Documentation
+- Docstrings, Julia->Documentation->Documentation
+
 # Features
 - Keyword linesearch selection
 - Custom Newton linesearch

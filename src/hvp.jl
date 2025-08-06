@@ -136,7 +136,7 @@ Input:
 	H :: LHvpOperator
 	v :: rhs vector
 =#
-function mul!(result::AbstractVector, H::LHvpOperator, v::S) where S<:AbstractVector{<:AbstractFloat}
+function LinearAlgebra.mul!(result::AbstractVector, H::LHvpOperator, v::S) where S<:AbstractVector{<:AbstractFloat}
     H.nprod += 1
 
     mul!(result, H.op, v)
@@ -166,7 +166,7 @@ Input:
 function update!(H::ADHvpOperator, x::S) where {S<:AbstractVector{<:AbstractFloat}}
     H.x .= x
 	
-	H.prep = prepare_hvp_same_point(H.f, H.ad_backend, x, similar(x))
+	H.prep = prepare_hvp_same_point(H.f, H.ad_backend, x, (similar(x),))
 
 	return nothing
 end
@@ -180,7 +180,7 @@ Input:
 =#
 function ADHvpOperator(f::F, x::S, ad_backend) where {F<:Function, T<:AbstractFloat, S<:AbstractVector{T}}
 
-	prep = prepare_hvp_same_point(f, ad_backend, x, similar(x))
+	prep = prepare_hvp_same_point(f, ad_backend, x, (similar(x),))
 
     return ADHvpOperator(f, x, ad_backend, prep, 0)
 end
@@ -193,10 +193,10 @@ Input:
 	H :: ADHvpOperator
 	v :: rhs vector
 =#
-function mul!(res::AbstractVector, H::ADHvpOperator, v::S) where S<:AbstractVector{<:AbstractFloat}
+function LinearAlgebra.mul!(res::AbstractVector, H::ADHvpOperator, v::S) where S<:AbstractVector{<:AbstractFloat}
 	H.nprod += 1
 
-    hvp!(H.f, (res), H.prep, H.ad_backend, H.x, (v))
+    hvp!(H.f, (res,), H.prep, H.ad_backend, H.x, (v,))
 
 	return nothing
 end

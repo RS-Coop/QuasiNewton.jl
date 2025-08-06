@@ -1,12 +1,15 @@
 #=
 Author: Cooper Simpson
 
-Tests for functionality found in src/optimizer.jl -- the SFN optimizer.
+Tests for functionality found in src/optimizer.jl
 =#
 
-if run_all || "optimizer" in ARGS
-    @testset "optimizer" begin
+#########################################################
 
+if run_all || "optimizer" in ARGS
+    @testset "Optimizer" begin
+
+        #Test objective function
         function rosenbrock(x)
             res = 0.0
             for i = 1:size(x,1)-1
@@ -15,28 +18,34 @@ if run_all || "optimizer" in ARGS
             return res
         end
 
-        #=
-        Test SFN optimizer
-        =#
-        @testset "SFN optimizer" begin
-            dim = rand(2:100)
+        #Newton
+        @testset "Newton" begin
+            dim = 2
             x = zeros(dim)
 
-            opt = SFNOptimizer(size(x,1))
+            @test_nowarn optimize!(x, rosenbrock, :newton, AutoEnzyme(); itmax=100, time_limit=Inf, M=0., linesearch=true)
 
-            @test_nowarn minimize!(opt, x, rosenbrock, itmax=5)
+            @test x ≈ ones(dim)
         end
 
-        #=
-        Test SFN linesearch
-        =#
-        @testset "SFN linesearch" begin
-            dim = rand(2:100)
-            x = rand(dim)
+        #R-SFN
+        @testset "R-SFN" begin
+            dim = 2
+            x = zeros(dim)
 
-            opt = SFNOptimizer(size(x,1), linesearch=true)
+            @test_nowarn optimize!(x, rosenbrock, :rsfn, AutoEnzyme(); itmax=100, time_limit=Inf, M=NaN, linesearch=true)
 
-            @test_nowarn minimize!(opt, x, rosenbrock, itmax=1)
+            @test x ≈ ones(dim)
+        end
+
+        #ARC
+        @testset "ARC" begin
+            dim = 2
+            x = zeros(dim)
+
+            @test_nowarn optimize!(x, rosenbrock, :arc, AutoEnzyme(); itmax=100, time_limit=Inf)
+
+            @test x ≈ ones(dim)
         end
     end
 end

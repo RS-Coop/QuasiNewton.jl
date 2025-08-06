@@ -1,82 +1,41 @@
 #=
 Author: Cooper Simpson
 
-Tests for functionality found in src/hvp.jl -- helpful functionality.
+Tests for functionality found in src/hvp.jl
 =#
 
-import LinearAlgebra as LA
-using Enzyme: hvp
+#########################################################
 
 if run_all || "hvp" in ARGS
-    @testset "hvp" begin
+    @testset "Hessian-vector prodcut (Hvp) operator" begin
 
-        #define the quadratic
+        #Define the quadratic
         n = 10
         A = randn((n,n))
         f(x)::Float64 = x'*A*x
 
-        #hvp problem setup
+        #Hvp problem setup
         x = randn(n)
         v = randn(n)
         product = (A+A')*v
 
-        #=
-        Test basic hvp function
-        =#
-        @testset "basic hvp" begin
-            # @test hvp(f, x, v) ≈ product
-            @test ehvp(f, x, v) ≈ product
-            @test zhvp(f, x, v) ≈ product
-            @test rhvp(f, x, v) ≈ product
-        end
-
-        #=
-        Test hvp operator
-        =#
-        @testset "hvp operator" begin
+        #Test Hvp operator
+        @testset "AD Hvp" begin
 
             result = similar(v)
             ϵ = randn(n)
 
-            @testset "enzyme" begin
-                Hv = EHvpOperator(f, x)
-                LA.mul!(result, Hv, v)
+            @testset "Enzyme.jl" begin
+                H = QuasiNewton.ADHvpOperator(f, x, AutoEnzyme())
+                mul!(result, H, v)
 
-                @test eltype(Hv) == eltype(x)
-                @test size(Hv) == (n, n)
+                @test eltype(H) == eltype(x)
+                @test size(H) == (n, n)
                 @test result ≈ product
-                @test Hv.nprod == 1
+                @test H.nprod == 1
 
-                update!(Hv, x+ϵ)
-                LA.mul!(result, Hv, v)
-                @test result ≈ product
-            end
-
-            @testset "reversediff" begin
-                Hv = RHvpOperator(f, x)
-                LA.mul!(result, Hv, v)
-
-                @test eltype(Hv) == eltype(x)
-                @test size(Hv) == (n, n)
-                @test result ≈ product
-                @test Hv.nprod == 1
-
-                update!(Hv, x+ϵ)
-                LA.mul!(result, Hv, v)
-                @test result ≈ product
-            end
-
-            @testset "zygote" begin
-                Hv = ZHvpOperator(f, x)
-                LA.mul!(result, Hv, v)
-
-                @test eltype(Hv) == eltype(x)
-                @test size(Hv) == (n, n)
-                @test result ≈ product
-                @test Hv.nprod == 1
-
-                update!(Hv, x+ϵ)
-                LA.mul!(result, Hv, v)
+                update!(H, x+ϵ)
+                mul!(result, H, v)
                 @test result ≈ product
             end
         end

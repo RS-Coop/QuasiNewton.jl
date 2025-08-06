@@ -21,7 +21,7 @@ function minimize!(opt::O, x::S, f::F, ad_backend; itmax::I=1000, time_limit::T2
     H = ADHvpOperator(f, x, ad_backend)
 
     prep = prepare_gradient(f, ad_backend, x)
-    fg! = (g,x) -> value_and_gradient!(f, g, prep, ad_backend, x)
+    fg! = (g,x) -> value_and_gradient!(f, g, prep, ad_backend, x)[1]
 
     #Iterate
     stats = iterate!(opt, x, f, fg!, H, itmax, time_limit)
@@ -43,7 +43,7 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function minimize!(opt::O, x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, M<:AbstractMatrix{T}, I<:Integer}
+function minimize!(opt::O, x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, M, I<:Integer}
     #LinearOperator
     H = LHvpOperator(H, x)
 
@@ -67,7 +67,7 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function iterate!(opt::O, x::S, f::F1, fg!::F2, H::L, itmax::I, time_limit::T) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, L<:LinearOperator, I<:Integer}
+function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::I, time_limit::T) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, Hv<:HvpOperator, I<:Integer}
     #Start time
     tic = time_ns()
     
@@ -94,7 +94,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::L, itmax::I, time_limit::T) w
         if any(isnan.(g2))
             opt.M = 1e-8
         else
-            apply!(ζ, H, ζ) 
+            mul!(ζ, H, ζ) 
             ζ .= g2-grads-ζ
 
             opt.M = min(1e8, 2*norm(ζ)/(D))
