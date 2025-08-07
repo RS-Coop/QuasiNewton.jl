@@ -4,6 +4,8 @@ A collection of quasi-Newton optimization algorithms.
 
 ### Author: [Cooper Simpson](https://rs-coop.github.io/)
 
+**DISCLAIMER**: This package is still very much a work in progress and certainly not everything has been tested thoroughly. For example, the AD functionality has only been tested (in a limited capacity) with the Enzyme.jl backend.
+
 ## License & Citation
 All source code is made available under an MIT license. You can freely use and modify the code, without warranty, so long as you provide attribution to the authors. See `LICENSE` for the full text.
 
