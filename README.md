@@ -19,7 +19,7 @@ Our use of the term *quasi* should not be taken in the traditional sense, i.e. o
 ```math
 \min_{\mathbf{x}\in \mathbb{R}^n}f(\mathbf{x})
 ```
-where $f:\mathbb{R}^n\to\mathbb{R}$ is a twice continuously differentiable function, possibly with a Lipschitz continuous Hessian. We then consider updates of the following form:
+where $`f:\mathbb{R}^n\to\mathbb{R}`$ is a twice continuously differentiable function, possibly with a Lipschitz continuous Hessian. We then consider updates of the following form:
 ```math
 \mathbf{x}_{(k+1)} = \mathbf{x}_{(k)} - \eta_{(k)}\mathbf{B}_{(k)}^{-1}\nabla f(\mathbf{x}_{(k)})
 ```
