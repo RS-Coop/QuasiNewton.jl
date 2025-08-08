@@ -23,7 +23,7 @@ where $f:\mathbb{R}^n\to\mathbb{R}$ is a twice continuously differentiable funct
 ```math
 \mathbf{x}_{(k+1)} = \mathbf{x}_{(k)} - \eta_{(k)}\mathbf{B}_{(k)}^{-1}\nabla f(\mathbf{x}_{(k)})
 ```
-where $\mathbf{B}_{(k)}$ is some matrix constructed as a function of the Hessian $\mathbf{H}_{(k)} = \nabla^2 f(\mathbf{x}_{(k)})$, recovering different algorithms.
+where $`\mathbf{B}_{(k)}`$ is some matrix constructed as a function of the Hessian $`\mathbf{H}_{(k)} = \nabla^2 f(\mathbf{x}_{(k)})`$, recovering different algorithms.
 
 All algorithms are implemented matrix-free using Krylov subspace methods to compute the update and can leverage mixed-mode automatic differentiation to compute cheap Hessian-vector products.
 
@@ -31,19 +31,19 @@ All algorithms are implemented matrix-free using Krylov subspace methods to comp
 ```math
 \mathbf{B}_{(k)} = \mathbf{H}_{(k)} + \lambda_{(k)}\mathbf{I}
 ```
-where choosing $\lambda_{(k)}=0$ recovers vanilla Newton's method and $\lambda_{(k)}\propto\|\nabla^2f(\mathbf{x}_{(k)})\|^{1/2}$ recovers the [regularized Newton's method](https://epubs.siam.org/doi/10.1137/22M1488752).
+where choosing $`\lambda_{(k)}=0`$ recovers vanilla Newton's method and $`\lambda_{(k)}\propto\|\nabla f(\mathbf{x}_{(k)})\|^{1/2}`$ recovers the [regularized Newton's method](https://epubs.siam.org/doi/10.1137/22M1488752).
 
 ### Regularized Saddle-Free Newton (R-SFN)
 ```math
 \mathbf{B}_{(k)} = \left(\mathbf{H}_{(k)}^2 + \lambda_{(k)}\mathbf{I}\right)^{1/2}
 ```
-where the regularization term is $\lambda_{(k)}\propto\|\nabla^2f(\mathbf{x}_{(k)})\|$. The matrix function in question is a smooth approximation to the absolute value and is computed via the Lanczos process. See [Publications](#publications) for more details.
+where the regularization term is $`\lambda_{(k)}\propto\|\nabla f(\mathbf{x}_{(k)})\|`$. The matrix function in question is a smooth approximation to the absolute value and is computed via the Lanczos process. See [Publications](#publications) for more details.
 
 ### Adaptive Regularization with Cubics (ARC)
 ```math
 \mathbf{B}_{(k)} = \mathbf{H}_{(k)} + \lambda_{(k)}\mathbf{I}
 ```
-where the analytic choice of regularization is $\lambda_{(k)}\propto\|\mathbf{x}_{(k+1)}-\mathbf{x}_{(k)}\|$, but in practice this is chosen adaptively. This particular implementation is based of [ARCqK](https://link.springer.com/article/10.1007/s10107-023-02007-6).
+where the analytic choice of regularization is $`\lambda_{(k)}\propto\|\mathbf{x}_{(k+1)} - \mathbf{x}_{(k)}\|`$, but in practice this is chosen adaptively. This particular implementation is based of [ARCqK](https://link.springer.com/article/10.1007/s10107-023-02007-6).
 
 ## Installation
 This package can be installed just like any other Julia package. From the terminal, after starting the Julia REPL, run the following:
