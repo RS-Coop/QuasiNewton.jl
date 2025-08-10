@@ -103,7 +103,7 @@ Adaptive Regularization with Cubics (ARC) optimizer.
 mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
     solver::Q #search direction solver
     M::R1 #
-    const linesearch::F
+    const linesearch!::F
     const η::R2 #
     const η1::R2 #
     const η2::R2 #

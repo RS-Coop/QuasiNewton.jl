@@ -197,7 +197,15 @@ Input:
 @inline function LinearAlgebra.mul!(res::S1, H::Hv, v::S2) where {S1<:AbstractVector{<:AbstractFloat}, S2<:AbstractVector{<:AbstractFloat}, Hv<:ADHvpOperator}
 	H.nprod += 1
 
-    hvp!(H.f, (res,), H.prep, H.ad_backend, H.x, (v,))
+    # hvp!(H.f, (res,), H.prep, H.ad_backend, H.x, (v,))
+
+    _res = Vector(res)
+    _v = Vector(v)
+    _x = Vector(H.x)
+
+    hvp!(H.f, (_res,), H.prep, H.ad_backend, _x, (_v,))
+
+    copyto!(res, _res)  # Write back result to the original destination
 
 	return nothing
 end

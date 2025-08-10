@@ -10,7 +10,7 @@ With noise 1e-6, there are only a couple of problem failures.
 - Docstrings, Julia->Documentation->Documentation
 
 # Features
-- Keyword linesearch selection
+- ADHvpOperator mul! without having to convert to Vector
 - Custom Newton linesearch
 - What happens if M linesearch fails too many times
 - What happens if krylov processes for Newton or RN haven't converged?

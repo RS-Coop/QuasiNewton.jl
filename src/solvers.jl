@@ -34,7 +34,7 @@ end
     return posdef ? newton_solver(dim, type, krylov_order, Val(true)) : newton_solver(dim, type, krylov_order, Val(false))
 end
 
-function step!(solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::R; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
 
     #Regularization
     λ = iszero(M) ? zero(g_norm) : max(min(1e16, M*g_norm), 1e-16)
@@ -88,7 +88,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return LFASolver(rank, min_rank, max_rank, depth, type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::R; depth::Int=solver.depth, tol::R=NaN, time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; depth::Int=solver.depth, tol::R1=NaN, time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
 
     #Regularization
     λ = iszero(M) ? zero(g_norm) : max(min(1e16, M*g_norm), 1e-16)
@@ -166,7 +166,7 @@ function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vec
     return EigenSolver(type(undef, dim))
 end
 
-function step!(solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::R; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
 
     #Regularization
     λ = iszero(M) ? zero(g_norm) : max(min(1e16, M*g_norm), 1e-16)
@@ -210,7 +210,7 @@ function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
 end
 
-function step!(solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::R; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
     
     #Tolerance
     ζ = 0.5

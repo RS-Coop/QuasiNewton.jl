@@ -139,7 +139,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
         step!(opt.solver, stats, H, grads, g_norm, opt.M; time_limit=time_limit-time)
 
         #Linesearch
-        if !isnothing(opt.linesearch!) && opt.linesearch!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
+        if !isnothing(opt.linesearch!) && !opt.linesearch!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
             stats.status = "Linesearch failure"
             break
         else

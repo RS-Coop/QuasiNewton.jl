@@ -12,7 +12,7 @@ if run_all || "hvp" in ARGS
         #Define the quadratic
         n = 10
         A = randn((n,n))
-        f(x)::Float64 = x'*A*x
+        f(x) = dot(x,A,x)
 
         #Hvp problem setup
         x = randn(n)
@@ -34,7 +34,7 @@ if run_all || "hvp" in ARGS
                 @test result ≈ product
                 @test H.nprod == 1
 
-                update!(H, x+ϵ)
+                QuasiNewton.update!(H, x+ϵ)
                 mul!(result, H, v)
                 @test result ≈ product
             end

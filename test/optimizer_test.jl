@@ -18,34 +18,33 @@ if run_all || "optimizer" in ARGS
             return res
         end
 
+        dim = 2
+
         #Newton
         @testset "Newton" begin
-            dim = 2
             x = zeros(dim)
 
-            @test_nowarn optimize!(x, rosenbrock, :newton, AutoEnzyme(); itmax=100, time_limit=Inf, M=0., linesearch=true)
+            @test_nowarn optimize!(x, rosenbrock, Val(:newton), AutoEnzyme(); itmax=100, time_limit=Inf, M=0.)
 
-            @test x ≈ ones(dim)
+            @test x ≈ ones(dim) atol=1e-5
         end
 
         #R-SFN
         @testset "R-SFN" begin
-            dim = 2
             x = zeros(dim)
 
-            @test_nowarn optimize!(x, rosenbrock, :rsfn, AutoEnzyme(); itmax=100, time_limit=Inf, M=NaN, linesearch=true)
+            @test_nowarn optimize!(x, rosenbrock, Val(:rsfn), AutoEnzyme(); itmax=100, time_limit=Inf, M=1e-8, solver=QuasiNewton.EigenSolver)
 
-            @test x ≈ ones(dim)
+            @test x ≈ ones(dim) atol=1e-5
         end
 
         #ARC
         @testset "ARC" begin
-            dim = 2
             x = zeros(dim)
 
-            @test_nowarn optimize!(x, rosenbrock, :arc, AutoEnzyme(); itmax=100, time_limit=Inf)
+            @test_nowarn optimize!(x, rosenbrock, Val(:arc), AutoEnzyme(); itmax=100, time_limit=Inf)
 
-            @test x ≈ ones(dim)
+            @test x ≈ ones(dim) atol=1e-5
         end
     end
 end

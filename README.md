@@ -69,6 +69,9 @@ will export four in-place optimization routines: `optimize!`, `newton!`, `rsfn!`
 
 First, we consider the following example of minimizing a simple least-squares problem with Newton's method.
 ```julia
+using LinearAlgebra #for norm
+using LinearOperators #for Hessian
+
 d = 100 #problem dimension
 
 A = randn(d,d) #random data
@@ -79,19 +82,27 @@ function fg!(g, x) #computes gradient in-place and returns objective function
 	g .= A'*(A*x - b)
 	return f(x)
 end
-H(x) = A'*A #computes Hessian
+H(x) = LinearOperator(A'*A) #computes Hessian
 
-stats = optimize!(randn(d), f, fg!, H, :newton;
+stats = optimize!(randn(d), f, fg!, H, Val(:newton);
 					itmax=100,
 					time_limit=60,
 					posdef=true,
-					M=0,
-					linesearch=true,
-					history=true)
+					M=0.0)
 
 show(stats)
 #=
-
+Converged:                    true
+Iterations:                      1
+Function Evals:                  3
+Hvp Evals:                     151
+Run Time (s):             3.59e-02
+Minimum:                 1.600e-12
+Gradient Norm:           2.259e-05
+Max/Avg. Residual Norm:  0.000e+00, 0.000e+00
+Max/Avg. Regularization: 0.000e+00, 0.000e+00
+Avg. Krylov Iterations:  1.510e+02
+Status:  
 =#
 ```
 
@@ -109,16 +120,24 @@ function rosenbrock(x) #objective function
 	return res
 end
 
-stats = optimize!(zeros(10), rosenbrock, :rsfn, AutoEnzyme();
+stats = optimize!(zeros(10), rosenbrock, Val(:rsfn), AutoEnzyme();
 					itmax=100,
-					time_limt=60,
-					M=1e-8,
-					linesearch=true,
-					history=true)
+					time_limit=60,
+					M=1e-8)
 
 show(stats)
 #=
-
+Converged:                    true
+Iterations:                     73
+Function Evals:                 74
+Hvp Evals:                     353
+Run Time (s):             3.30e-04
+Minimum:                 6.415e-12
+Gradient Norm:           1.458e-05
+Max/Avg. Residual Norm:  7.101e+00, 5.267e-01
+Max/Avg. Regularization: 1.288e+02, 1.264e+01
+Avg. Krylov Iterations:  4.836e+00
+Status:
 =#
 ```
 
