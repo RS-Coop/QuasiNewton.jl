@@ -3,14 +3,14 @@ Author: Cooper Simpson
 
 Adapted from Krylov.jl (src/krylov_processes.jl)
 =#
-function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {T<:AbstractFloat, S<:AbstractVector{T}, M<:AbstractMatrix{T}}
+function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
 	m, n = size(A)
 
-	β₁ = zero(T)
-	V = Matrix{T}(undef, n, k+1)
+	β₁ = zero(R)
+	V = Matrix{R}(undef, n, k+1)
 
-	d = zeros(T, k)
-	dl = zeros(T, k)
+	d = zeros(R, k)
+	dl = zeros(R, k)
 
 	for i = 1:k
 		vᵢ = view(V,:,i)
@@ -20,7 +20,7 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 			β₁ = norm(b)
 			if β₁ == 0
 				!allow_breakdown && error("Exact breakdown β₁ == 0.")
-				fill!(vᵢ, zero(T))
+				fill!(vᵢ, zero(R))
 			else
 				@. vᵢ = b/β₁
 			end
@@ -54,7 +54,7 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 
 		if βᵢ₊₁ == 0
 			!allow_breakdown && error("Exact breakdown βᵢ₊₁ == 0 at iteration i = $i.")
-			fill!(vᵢ₊₁, zero(T))
+			fill!(vᵢ₊₁, zero(R))
 		else
 			@. vᵢ₊₁ = q/βᵢ₊₁
 		end

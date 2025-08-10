@@ -11,14 +11,14 @@ export LHvpOperator, ADHvpOperator
 
 #########################################################
 
-abstract type HvpOperator{T} <: AbstractMatrix{T} end
+abstract type HvpOperator{R} <: AbstractMatrix{R} end
 
 #=
 Base and LinearAlgebra implementations for HvpOperator
 =#
-Base.eltype(H::HvpOperator{T}) where {T} = T
+Base.eltype(H::HvpOperator{R}) where {R} = R
 Base.size(H::HvpOperator) = (length(H.x), length(H.x))
-Base.size(H::HvpOperator, d::Integer) = d ≤ 2 ? length(H.x) : 1
+Base.size(H::HvpOperator, d::Int) = d ≤ 2 ? length(H.x) : 1
 Base.adjoint(H::HvpOperator) = H
 LinearAlgebra.ishermitian(H::HvpOperator) = true
 LinearAlgebra.issymmetric(H::HvpOperator) = true
@@ -27,7 +27,7 @@ LinearAlgebra.issymmetric(H::HvpOperator) = true
 In place update of HvpOperator
 Input:
 =#
-function reset!(H::HvpOperator)
+@inline function reset!(H::HvpOperator)
 	H.nprod = 0
 
 	return nothing
@@ -36,16 +36,16 @@ end
 #=
 Form full matrix
 =#
-function Base.Matrix(H::HvpOperator{T}) where {T}
+@inline function Base.Matrix(H::HvpOperator{R}) where {R}
 	n = size(H, 1)
-	H_mat = Matrix{T}(undef, n, n)
+	H_mat = Matrix{R}(undef, n, n)
 
-	ei = zeros(T, n)
+	ei = zeros(R, n)
 
 	@inbounds for i = 1:n
-		ei[i] = one(T)
+		ei[i] = one(R)
 		mul!(@view(H_mat[:,i]), H, ei)
-		ei[i] = zero(T)
+		ei[i] = zero(R)
 	end
 
 	return Hermitian(H_mat)
@@ -59,7 +59,7 @@ Input:
 	H :: HvpOperator
 	v :: rhs vector
 =#
-function LinearAlgebra.mul!(result::AbstractMatrix, H::Hv, V::M) where {M<:AbstractMatrix{<:AbstractFloat}, Hv<:HvpOperator}
+@inline function LinearAlgebra.mul!(result::AbstractMatrix, H::Hv, V::M) where {M<:AbstractMatrix{<:AbstractFloat}, Hv<:HvpOperator}
 	for i=1:size(V,2)
 		@views mul!(result[:,i], H, V[:,i])
 	end
@@ -74,7 +74,7 @@ Input:
 	H :: HvpOperator
 	v :: rhs vector
 =#
-function *(H::Hv, v::S) where {S<:AbstractVector{<:AbstractFloat}, Hv<:HvpOperator}
+@inline function *(H::Hv, v::S) where {S<:AbstractVector{<:AbstractFloat}, Hv<:HvpOperator}
 	res = similar(v)
 	mul!(res, H, v)
 	return res
@@ -87,7 +87,7 @@ Input:
 	H :: HvpOperator
 	v :: rhs vector
 =#
-function *(H::Hv, V::M) where {M<:Matrix{<:AbstractFloat}, Hv<:HvpOperator}
+@inline function *(H::Hv, V::M) where {M<:Matrix{<:AbstractFloat}, Hv<:HvpOperator}
 	res = similar(V)
 	mul!(res, H, V)
 	return res
@@ -98,11 +98,11 @@ end
 #=
 Hessian-vector product operator compatible with LinearOperators.jl
 =#
-mutable struct LHvpOperator{F<:Function, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer, L} <: HvpOperator{T}
+mutable struct LHvpOperator{F<:Function, R<:AbstractFloat, S<:AbstractVector{R}, L<:AbstractLinearOperator{R}} <: HvpOperator{R}
     const f::F
     x::S
     op::L
-    nprod::I
+    nprod::Int
 end
 
 #=
@@ -110,7 +110,7 @@ In place update of LHvpOperator
 Input:
 	x :: new input to f
 =#
-function update!(H::LHvpOperator, x::S) where {S<:AbstractVector{<:AbstractFloat}}
+@inline function update!(H::LHvpOperator, x::S) where {S<:AbstractVector{<:AbstractFloat}}
 	H.x .= x
     H.op = H.f(x)
 
@@ -124,8 +124,9 @@ Input:
     f :: function that builds hessian operator
 	x :: input to f
 =#
-function LHvpOperator(f::F, x::S) where {F<:Function, T<:AbstractFloat, S<:AbstractVector{T}}
-	return LHvpOperator(f, x, f(x), 0)
+function LHvpOperator(f::F, x::S) where {F<:Function, R<:AbstractFloat, S<:AbstractVector{R}}
+	op = f(x)
+	return LHvpOperator(f, x, op, 0)
 end
 
 #=
@@ -136,7 +137,7 @@ Input:
 	H :: LHvpOperator
 	v :: rhs vector
 =#
-function LinearAlgebra.mul!(result::AbstractVector, H::LHvpOperator, v::S) where S<:AbstractVector{<:AbstractFloat}
+@inline function LinearAlgebra.mul!(result::S1, H::LHvpOperator, v::S2) where {S1<:AbstractVector{<:AbstractFloat}, S2<:AbstractVector{<:AbstractFloat}}
     H.nprod += 1
 
     mul!(result, H.op, v)
@@ -149,12 +150,12 @@ end
 #=
 Hessian-vector product operator compatible with DifferentiationInterface.jl
 =#
-mutable struct ADHvpOperator{F<:Function, T<:AbstractFloat, S<:AbstractVector{T}, I<:Integer} <: HvpOperator{T}
+mutable struct ADHvpOperator{F<:Function, R<:AbstractFloat, S<:AbstractVector{R}, P, B} <: HvpOperator{R}
     const f::F
 	x::S
-	const ad_backend
-	prep
-	nprod::I
+	const ad_backend::B
+	prep::P
+	nprod::Int
 end
 
 #=
@@ -163,7 +164,7 @@ In place update of ADHvpOperator.
 Input:
 	x :: new input to f
 =#
-function update!(H::ADHvpOperator, x::S) where {S<:AbstractVector{<:AbstractFloat}}
+@inline function update!(H::ADHvpOperator, x::S) where {S<:AbstractVector{<:AbstractFloat}}
     H.x .= x
 	
 	H.prep = prepare_hvp_same_point(H.f, H.ad_backend, x, (similar(x),))
@@ -178,7 +179,7 @@ Input:
 	f :: scalar valued function
 	x :: input to f
 =#
-function ADHvpOperator(f::F, x::S, ad_backend) where {F<:Function, T<:AbstractFloat, S<:AbstractVector{T}}
+function ADHvpOperator(f::F, x::S, ad_backend::B) where {F<:Function, R<:AbstractFloat, S<:AbstractVector{R}, B}
 
 	prep = prepare_hvp_same_point(f, ad_backend, x, (similar(x),))
 
@@ -193,7 +194,7 @@ Input:
 	H :: ADHvpOperator
 	v :: rhs vector
 =#
-function LinearAlgebra.mul!(res::AbstractVector, H::ADHvpOperator, v::S) where S<:AbstractVector{<:AbstractFloat}
+@inline function LinearAlgebra.mul!(res::S1, H::Hv, v::S2) where {S1<:AbstractVector{<:AbstractFloat}, S2<:AbstractVector{<:AbstractFloat}, Hv<:ADHvpOperator}
 	H.nprod += 1
 
     hvp!(H.f, (res,), H.prep, H.ad_backend, H.x, (v,))

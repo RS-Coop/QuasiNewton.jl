@@ -16,7 +16,7 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function minimize!(opt::O, x::S, f::F, ad_backend; itmax::I=1000, time_limit::T2=Inf) where {O<:Optimizer, T1<:AbstractFloat, S<:AbstractVector{T1}, T2, F<:Function, I<:Integer}
+@inline function minimize!(opt::O, x::S, f::F, ad_backend; itmax::Int=1000, time_limit=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F<:Function}
     #Autodiff
     H = ADHvpOperator(f, x, ad_backend)
 
@@ -43,9 +43,9 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function minimize!(opt::O, x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, M, I<:Integer}
+@inline function minimize!(opt::O, x::S, f::F1, fg!::F2, Hf::F3; itmax::Int=1000, time_limit=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, F3<:Function}
     #LinearOperator
-    H = LHvpOperator(H, x)
+    H = LHvpOperator(Hf, x)
 
     #iterate
     stats = iterate!(opt, x, f, fg!, H, itmax, time_limit)
@@ -67,12 +67,12 @@ Input:
     itmax :: maximum iterations
     time_limit :: maximum run time
 =#
-function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::I, time_limit::T) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, Hv<:HvpOperator, I<:Integer}
+function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) where {O<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, F1<:Function, F2<:Function, Hv<:HvpOperator}
     #Start time
     tic = time_ns()
     
     #Stats
-    stats = Stats(T)
+    stats = Stats(R)
     converged = false
     iterations = 0
     
@@ -133,13 +133,13 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::I, time_limit::T) 
         #Step
         ##########
         #Reset search direction
-        opt.solver.p .= zero(eltype(opt.solver.p))
+        opt.solver.p .= zero(opt.solver.p)
 
         #Solve for search direction
         step!(opt.solver, stats, H, grads, g_norm, opt.M; time_limit=time_limit-time)
 
         #Linesearch
-        if opt.linesearch && !search!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
+        if !isnothing(opt.linesearch!) && opt.linesearch!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
             stats.status = "Linesearch failure"
             break
         else
@@ -165,7 +165,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::I, time_limit::T) 
     #Update stats
     stats.converged = converged
     stats.iterations = iterations
-    stats.f_evals += iterations+1
+    stats.f_evals += iterations + 1
     stats.hvp_evals = H.nprod
     stats.run_time = elapsed(tic)
 

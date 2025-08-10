@@ -4,20 +4,20 @@ Author: Cooper Simpson
 Newton-type optimizers.
 =#
 
-abstract type Optimizer end
+abstract type QuasiNewtonOptimizer end
 
 #########################################################
 
 #=
 (Regularized) Newton optimizer.
 =#
-mutable struct NewtonOptimizer{T1<:Real, T2<:AbstractFloat, S} <: Optimizer
-    solver::S #search direction solver
-    M::T1 #hessian regularization scaling
-    const η::T2 #step-size
-    const linesearch::Bool #whether to use linesearch
-    const atol::T2 #absolute gradient norm tolerance
-    const rtol::T2 #relative gradient norm tolerance
+mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
+    solver::Q #search direction solver
+    M::R1 #hessian regularization scaling
+    const linesearch!::F #linesearch function
+    const η::R2 #step-size
+    const atol::R2 #absolute gradient norm tolerance
+    const rtol::R2 #relative gradient norm tolerance
 end
 
 #=
@@ -31,22 +31,22 @@ Input:
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
 =#
-function NewtonOptimizer(dim::I; posdef::Bool=false, M::T1=NaN, η::T2=1.0, linesearch::Bool=false, α::T2=1/sqrt(2), atol::T2=1e-5, rtol::T2=1e-6) where {I<:Integer, T1<:Real, T2<:AbstractFloat}
+function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch!::F=backtrack!, η::R2=1.0, α::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
 
     #Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
 
     #Linesearch parameters
-    if linesearch
-        @assert 0<α && α<1
+    if isnothing(linesearch!)
+        @assert 0<η && η≤1
     else
         @assert 0<η && η≤1
     end
 
     #Solver
-    solver = NewtonSolver(dim, posdef=posdef)
+    solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
-    return NewtonOptimizer(solver, M, η, linesearch, atol, rtol)
+    return NewtonOptimizer(solver, M, linesearch!, η, atol, rtol)
 end
 
 #########################################################
@@ -54,14 +54,14 @@ end
 #=
 Regularized Saddle-Free Newton (R-SFN) optimizer.
 =#
-mutable struct RSFNOptimizer{T1<:Real, T2<:AbstractFloat, S} <: Optimizer
-    solver::S #search direction solver
-    M::T1 #hessian regularization scaling
-    const η::T2 #step-size
-    const linesearch::Bool #whether to use linesearch
-    const α::T2 #linesearch factor
-    const atol::T2 #absolute gradient norm tolerance
-    const rtol::T2 #relative gradient norm tolerance
+mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
+    solver::Q #search direction solver
+    M::R1 #hessian regularization scaling
+    const linesearch!::F #linesearch function
+    const η::R2 #step-size
+    const α::R2 #linesearch factor
+    const atol::R2 #absolute gradient norm tolerance
+    const rtol::R2 #relative gradient norm tolerance
 end
 
 #=
@@ -77,22 +77,22 @@ Input:
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
 =#
-function RSFNOptimizer(dim::I; solver::Symbol=:SFNSolver, M::T1=NaN, η::T2=1.0, linesearch::Bool=false, α::T2=1/sqrt(2), atol::T2=1e-5, rtol::T2=1e-6, kwargs...) where {I<:Integer, T1<:Real, T2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch!::F=search_M!, η::R2=1.0, α::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     #Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
 
     #Linesearch parameters
-    if linesearch
-        @assert 0<α && α<1
+    if isnothing(linesearch!)
+        @assert 0<η && η≤1
     else
         @assert 0<η && η≤1
     end
 
     #Solver
-    solver = eval(solver)(dim; kwargs...)
+    solver_ = solver(dim; kwargs...)
 
-    return RSFNOptimizer(solver, M, η, linesearch, α, atol, rtol)
+    return RSFNOptimizer(solver_, M, linesearch!, η, α, atol, rtol)
 end
 
 #########################################################
@@ -100,17 +100,17 @@ end
 #=
 Adaptive Regularization with Cubics (ARC) optimizer.
 =#
-mutable struct ARCOptimizer{T1<:Real, T2<:AbstractFloat, S} <: Optimizer
-    solver::S #search direction solver
-    M::T1 #
-    const linesearch::Bool
-    const η::T2 #
-    const η1::T2 #
-    const η2::T2 #
-    const γ1::T2 #
-    const γ2::T2 #
-    const atol::T2 #absolute gradient norm tolerance
-    const rtol::T2 #relative gradient norm tolerance
+mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
+    solver::Q #search direction solver
+    M::R1 #
+    const linesearch::F
+    const η::R2 #
+    const η1::R2 #
+    const η2::R2 #
+    const γ1::R2 #
+    const γ2::R2 #
+    const atol::R2 #absolute gradient norm tolerance
+    const rtol::R2 #relative gradient norm tolerance
 end
 
 #=
@@ -126,7 +126,7 @@ Input:
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
 =#
-function ARCOptimizer(dim::I; M::T1=10.0, η1::T2=0.1, η2::T2=0.75, γ1::T2=0.1, γ2::T2=5.0, atol::T2=1e-5, rtol::T2=1e-6, kwargs...) where {I<:Integer, T1<:Real, T2<:AbstractFloat}
+function ARCOptimizer(dim::Int; M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0.1, γ2::R2=5.0, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, R2<:AbstractFloat}
 
     #
     @assert 0<M
@@ -135,5 +135,5 @@ function ARCOptimizer(dim::I; M::T1=10.0, η1::T2=0.1, η2::T2=0.75, γ1::T2=0.1
 
     solver = ARCSolver(dim; kwargs...)
 
-    return ARCOptimizer(solver, M, true, 1.0, η1, η2, γ1, γ2, atol, rtol)
+    return ARCOptimizer(solver, M, search_ARC!, 1.0, η1, η2, γ1, γ2, atol, rtol)
 end

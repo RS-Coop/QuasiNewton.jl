@@ -8,7 +8,7 @@ using LineSearches: BackTracking
 
 ########################################################
 
-function backtrack!(opt::Optimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
+function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
     
     #Setup
     p = opt.solver.p
@@ -45,17 +45,6 @@ end
 
 ########################################################
 
-function search!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
-    
-    if iszero(opt.M)
-        return backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, H)
-    end
-    
-    return search_M!(opt, stats, x, f, fg!, fval, g, g_norm, H)
-end
-
-########################################################
-
 #=
 In place SFN regularization line-search
 
@@ -67,7 +56,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_M!(opt::RSFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
+function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, g_norm::R2, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R2<:AbstractFloat, S<:AbstractVector{R2}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
@@ -81,13 +70,13 @@ function search_M!(opt::RSFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval:
     #Target decrement
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
-    if p_norm ≥ eps(T) && f(x+p)-fval ≤ dec #success
+    if p_norm ≥ eps(R2) && f(x+p)-fval ≤ dec #success
         opt.M = max(opt.M/2, 1e-8) #decrease regularization
 
     else #failure
         opt.M = min(opt.M*2, 1e8) #increase regularization
 
-        opt.solver.p .= zero(T)
+        opt.solver.p .= zero(R2)
 
         # status = false #NOTE: Not setting this to false, as we don't want to exit
     end
@@ -108,7 +97,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_η!(opt::RSFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
+function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, g_norm::R2, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R2<:AbstractFloat, S<:AbstractVector{R2}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
@@ -130,7 +119,7 @@ function search_η!(opt::RSFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     #Check search direction
-    if p_norm < sqrt(eps(T))
+    if p_norm < sqrt(eps(R2))
         status = false
         opt.M = 1e-8
     end
@@ -150,7 +139,7 @@ function search_η!(opt::RSFNOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval
         end
 
         #Check step-size
-        if η < sqrt(eps(T))
+        if η < sqrt(eps(R2))
             status = false
             opt.M = 1e-8
         end
@@ -173,7 +162,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
+function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, g_norm::R2, H::Hv) where {F1<:Function, F2<:Function, R2<:AbstractFloat, S<:AbstractVector{R2}, Hv<:HvpOperator}
     
     #Cubic sub-problem
     cubic_subprob = (d) -> begin

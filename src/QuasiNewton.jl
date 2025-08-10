@@ -11,7 +11,7 @@ Setup
 using LinearAlgebra
 using LinearOperators
 using DifferentiationInterface: prepare_gradient, prepare_hvp_same_point, value_and_gradient!, hvp!
-using Krylov: KrylovWorkspace, krylov_workspace, krylov_solve!, iteration_count, issolved, solution, statistics
+using Krylov: KrylovWorkspace, CgLanczosShiftWorkspace, SymmlqWorkspace, krylov_solve!, iteration_count, issolved, solution, statistics
 
 export optimize!, rsfn!, arc!, newton!
 
@@ -26,42 +26,34 @@ include("linesearch.jl")
 #########################################################
 #High-level interfaces
 
-function optimize!(x::S, f::F, optimizer::Symbol, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}, F<:Function}
-	if optimizer == :newton
-		opt = NewtonOptimizer(size(x,1); kwargs...) 
-	elseif optimizer == :rsfn
-		opt = RSFNOptimizer(size(x,1); kwargs...)
-	elseif optimizer == :arc
-		opt = ARCOptimizer(size(x,1); kwargs...)
-	else
-		throw(ArgumentError("invalid optimizer"))
-	end
-
-	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
-
-	return stats
+@inline function get_optimizer(::Val{:newton}, dim::Int; kwargs...)
+    return NewtonOptimizer(dim; kwargs...)
 end
 
-function optimize!(x::S, f::F1, fg!::F2, H::M, optimizer::Symbol; itmax::I=1000, time_limit::T=Inf, kwargs...) where {I<:Integer, T<:AbstractFloat, S<:AbstractVector{T}, F1<:Function, F2<:Function, M}
-	if optimizer == :newton
-		opt = NewtonOptimizer(size(x,1); kwargs...)
-	elseif optimizer == :rsfn
-		opt = RSFNOptimizer(size(x,1); kwargs...)
-	elseif optimizer == :arc
-		opt = ARCOptimizer(size(x,1); kwargs...)
-	else
-		throw(ArgumentError("invalid optimizer"))
-	end
+@inline function get_optimizer(::Val{:rsfn}, dim::Int; kwargs...)
+    return RSFNOptimizer(dim; kwargs...)
+end
 
-	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
+@inline function get_optimizer(::Val{:arc}, dim::Int; kwargs...)
+    return ARCOptimizer(dim; kwargs...)
+end
 
-	return stats
+function optimize!(x::S, f::F, ::Val{optimizer}, ad_backend; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F<:Function, optimizer}
+    opt = get_optimizer(Val(optimizer), size(x, 1); kwargs...)
+	
+    return minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
+end
+
+function optimize!(x::S, f::F1, fg!::F2, H::L, ::Val{optimizer}; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, L, optimizer}
+    opt = get_optimizer(Val(optimizer), size(x, 1); kwargs...)
+	
+    return minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
 end
 
 #########################################################
 #Newton
 
-function newton!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
+function newton!(x::S, f::F, ad_backend; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F}
 	opt = NewtonOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
@@ -69,7 +61,7 @@ function newton!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwarg
 	return stats
 end
 
-function newton!(x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, M, I}
+function newton!(x::S, f::F1, fg!::F2, H::M; itmax::Int=1000, time_limit=Inf) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M}
 	opt = NewtonOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
@@ -80,7 +72,7 @@ end
 #########################################################
 #R-SFN
 
-function rsfn!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
+function rsfn!(x::S, f::F, ad_backend; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F}
 	opt = RSFNOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
@@ -88,7 +80,7 @@ function rsfn!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs.
 	return stats
 end
 
-function rsfn!(x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, M, I}
+function rsfn!(x::S, f::F1, fg!::F2, H::M; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M}
 	opt = RSFNOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, fg!, H, itmax=itmax, time_limit=time_limit)
@@ -99,7 +91,7 @@ end
 #########################################################
 #ARC
 
-function arc!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F, I}
+function arc!(x::S, f::F, ad_backend; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F}
 	opt = ARCOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, ad_backend; itmax=itmax, time_limit=time_limit)
@@ -107,7 +99,7 @@ function arc!(x::S, f::F, ad_backend; itmax::I=1000, time_limit::T=Inf, kwargs..
 	return stats
 end
 
-function arc!(x::S, f::F1, fg!::F2, H::M; itmax::I=1000, time_limit::T=Inf, kwargs...) where {T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, M, I}
+function arc!(x::S, f::F1, fg!::F2, H::M; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M}
 	opt = ARCOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)

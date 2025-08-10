@@ -11,21 +11,21 @@ export Stats
 
 #########################################################
 
-mutable struct Stats{I<:Integer, S1<:Vector{<:AbstractFloat}}
+mutable struct Stats{I<:Integer, R<:Real}
     converged::Bool #whether optimizer has converged
     iterations::I #number of optimizer iterations
     f_evals::I #number of function evaluations
     hvp_evals::I #number of hvp evaluations
     run_time::Float64 #iteration runtime
-    f_seq::S1 #function value sequence
-    g_seq::S1 #gradient norm sequence
-    r_seq::S1 #residual norm sequence
-    λ_seq::S1 #regularization tracking
-    krylov_iterations::S1 #number of Krylov iterations #NOTE: We may not want this long term
+    f_seq::Vector{R} #function value sequence
+    g_seq::Vector{R} #gradient norm sequence
+    r_seq::Vector{R} #residual norm sequence
+    λ_seq::Vector{R} #regularization tracking
+    krylov_iterations::Vector{R} #number of Krylov iterations
     status::String #exit status
 end
 
-function Stats(type::Type{<:AbstractFloat})
+function Stats(type::Type{<:Real})
     return Stats(false, 0, 0, 0, 0.0, type[], type[], type[], type[], type[], "")
 end
 
