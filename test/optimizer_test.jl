@@ -21,6 +21,7 @@ if run_all || "optimizer" in ARGS
         dim = 2
 
         #Newton
+        #NOTE: This will fail, so maybe there is a better test where all succeed.
         @testset "Newton" begin
             x = zeros(dim)
 
