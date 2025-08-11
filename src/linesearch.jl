@@ -8,7 +8,7 @@ using LineSearches: BackTracking
 
 ########################################################
 
-function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g_norm::T, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, T<:AbstractFloat, S<:AbstractVector{T}, Hv<:HvpOperator}
+function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Setup
     p = opt.solver.p
@@ -37,7 +37,7 @@ function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::T, g::S, g
     p .*= α
 
     if !iszero(opt.M)
-        opt.M = α == 1. ? 2*opt.M : max(min(1e8, opt.M/α^2), 1e-8)
+        opt.M = α == 1. ? 2*R(opt.M) : max(min(R(1e8), R(opt.M)/α^2), R(1e-8))
     end
 
     return status
@@ -56,27 +56,24 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, g_norm::R2, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R2<:AbstractFloat, S<:AbstractVector{R2}, Hv<:HvpOperator}
+function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
-    p_norm = norm(p)
+    p_norm = sqrt(dot(p,p))
     status = true
-    λ = max(min(1e16, opt.M*g_norm), 1e-16)
-
-    #Test search direction
-    p_norm = norm(opt.solver.p)
+    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(1e16), R(opt.M)*g_norm), eps(R))
 
     #Target decrement
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
-    if p_norm ≥ eps(R2) && f(x+p)-fval ≤ dec #success
-        opt.M = max(opt.M/2, 1e-8) #decrease regularization
+    if p_norm ≥ eps(R) && f(x+p)-fval ≤ dec #success
+        opt.M = max(R(opt.M)/2, R(1e-8)) #decrease regularization
 
     else #failure
-        opt.M = min(opt.M*2, 1e8) #increase regularization
+        opt.M = min(R(opt.M)*2, R(1e8)) #increase regularization
 
-        opt.solver.p .= zero(R2)
+        p .= zero(R)
 
         # status = false #NOTE: Not setting this to false, as we don't want to exit
     end
@@ -97,16 +94,13 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, g_norm::R2, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R2<:AbstractFloat, S<:AbstractVector{R2}, Hv<:HvpOperator}
+function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
-    p_norm = norm(p)
+    p_norm = sqrt(dot(p,p))
     status = true
-    λ = max(min(1e16, opt.M*g_norm), 1e-16)
-
-    #Test search direction, select negative gradient if too small
-    p_norm = norm(opt.solver.p)
+    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(1e16), R(opt.M)*g_norm), eps(R))
     
     #Increase step-size
     η = 2.0
@@ -119,7 +113,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, 
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     #Check search direction
-    if p_norm < sqrt(eps(R2))
+    if p_norm < sqrt(eps(R))
         status = false
         opt.M = 1e-8
     end
@@ -130,7 +124,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, 
 
         if f(x+p)-fval ≤ dec
             #Update regularization
-            opt.M = max(min(1e8, opt.M/η^2), 1e-8)
+            opt.M = max(min(R(1e8), R(opt.M)/η^2), R(1e-8))
             break
         else
             η *= opt.α #reduce step-size
@@ -139,7 +133,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, 
         end
 
         #Check step-size
-        if η < sqrt(eps(R2))
+        if η < sqrt(eps(R))
             status = false
             opt.M = 1e-8
         end
@@ -162,7 +156,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 =#
-function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::R2, g::S, g_norm::R2, H::Hv) where {F1<:Function, F2<:Function, R2<:AbstractFloat, S<:AbstractVector{R2}, Hv<:HvpOperator}
+function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Cubic sub-problem
     cubic_subprob = (d) -> begin
@@ -223,7 +217,7 @@ function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval
         end
     end
 
-    opt.M = min(M_new, 1e16)
+    opt.M = min(M_new, R(1e16))
 
     return status
 end

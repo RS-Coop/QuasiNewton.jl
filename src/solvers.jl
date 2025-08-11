@@ -34,10 +34,10 @@ end
     return posdef ? newton_solver(dim, type, krylov_order, Val(true)) : newton_solver(dim, type, krylov_order, Val(false))
 end
 
-function step!(solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
+function step!(solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(1e16, M*g_norm), 1e-16)
+    λ = iszero(M) ? zero(g_norm) : max(min(R(1e16), R(M)*g_norm), eps(R))
 
     push!(stats.λ_seq, λ)
 
@@ -88,10 +88,10 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return LFASolver(rank, min_rank, max_rank, depth, type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; depth::Int=solver.depth, tol::R1=NaN, time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; depth::Int=solver.depth, tol::R=NaN, time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(1e16, M*g_norm), 1e-16)
+    λ = iszero(M) ? zero(g_norm) : max(min(R(1e16), R(M)*g_norm), eps(R))
 
     push!(stats.λ_seq, λ)
 
@@ -107,8 +107,8 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; 
     depth == solver.depth ? push!(stats.krylov_iterations, solver.rank) : stats.krylov_iterations[end] += solver.rank
 
     #Temporary memory, NOTE: Can you get away with just one of these?
-    cache1 = S(undef, solver.rank)
-    cache2 = S(undef, solver.rank)
+    cache1 = similar(g, solver.rank)
+    cache2 = similar(g, solver.rank)
 
     #Update search direction
     @views @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
@@ -123,7 +123,7 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; 
 
     @views r = -g_norm*βₖ₊₁*z*Q[:,solver.rank+1]
 
-    r_norm = norm(r)
+    r_norm = sqrt(dot(r, r))
 
     #Tolerance
     if isnan(tol)
@@ -140,7 +140,7 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; 
     if solver.min_rank != solver.max_rank
         if r_norm ≥ tol && depth == 1
             solver.rank = min(solver.max_rank, solver.rank*2)
-        elseif r_norm ≤ 1e-2*tol && depth == solver.depth
+        elseif r_norm ≤ R(1e-2)*tol && depth == solver.depth
             solver.rank = max(solver.min_rank, div(solver.rank, 2))
         end
     end
@@ -166,10 +166,10 @@ function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vec
     return EigenSolver(type(undef, dim))
 end
 
-function step!(solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
+function step!(solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(1e16, M*g_norm), 1e-16)
+    λ = iszero(M) ? zero(g_norm) : max(min(R(1e16), R(M)*g_norm), eps(R))
 
     push!(stats.λ_seq, λ)
 
@@ -210,7 +210,7 @@ function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
 end
 
-function step!(solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R1, M::R2; time_limit=Inf) where {R1<:AbstractFloat, R2<:Real, S<:AbstractVector{R1}, Hv<:HvpOperator}
+function step!(solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Tolerance
     ζ = 0.5

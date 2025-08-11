@@ -81,7 +81,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
 
     #Compute function and gradient
     fval = fg!(grads, x)
-    g_norm = norm(grads)
+    g_norm = sqrt(dot(grads, grads))
 
     #Estimate regularization
     if isnan(opt.M)
@@ -91,13 +91,13 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
         g2 = similar(grads)
         fg!(g2, x+ζ)
 
-        if any(isnan.(g2))
-            opt.M = 1e-8
+        if any(isnan, g2)
+            opt.M = R(1e-8)
         else
             mul!(ζ, H, ζ) 
             ζ .= g2-grads-ζ
 
-            opt.M = min(1e8, 2*norm(ζ)/(D))
+            opt.M = min(R(1e8), 2*norm(ζ)/(D))
         end
 
         g2 = nothing #mark for collection
@@ -133,7 +133,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
         #Step
         ##########
         #Reset search direction
-        opt.solver.p .= zero(opt.solver.p)
+        fill!(opt.solver.p, zero(R))
 
         #Solve for search direction
         step!(opt.solver, stats, H, grads, g_norm, opt.M; time_limit=time_limit-time)
@@ -149,7 +149,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
 
         #Update function and gradient
         fval = fg!(grads, x)
-        g_norm = norm(grads)
+        g_norm = sqrt(dot(grads, grads))
 
         #Update stats
         push!(stats.f_seq, fval)
