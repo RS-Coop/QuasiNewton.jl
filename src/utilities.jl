@@ -15,6 +15,7 @@ mutable struct Stats{I<:Integer, R<:Real}
     converged::Bool #whether optimizer has converged
     iterations::I #number of optimizer iterations
     f_evals::I #number of function evaluations
+    g_evals::I #number of gradient evaluations
     hvp_evals::I #number of hvp evaluations
     run_time::Float64 #iteration runtime
     f_seq::Vector{R} #function value sequence
@@ -26,13 +27,14 @@ mutable struct Stats{I<:Integer, R<:Real}
 end
 
 function Stats(type::Type{<:Real})
-    return Stats(false, 0, 0, 0, 0.0, type[], type[], type[], type[], type[], "")
+    return Stats(false, 0, 0, 0, 0, 0.0, type[], type[], type[], type[], type[], "")
 end
 
 function Base.show(io::IO, stats::Stats)
     @printf(io, "Converged:               %9s\n", stats.converged)
     @printf(io, "Iterations:              %9d\n", stats.iterations)
     @printf(io, "Function Evals:          %9d\n", stats.f_evals)
+    @printf(io, "Gradient Evals:          %9d\n", stats.g_evals)
     @printf(io, "Hvp Evals:               %9d\n", stats.hvp_evals)
     @printf(io, "Run Time (s):            %9.2e\n", stats.run_time)
     @printf(io, "Minimum:                 %9.3e\n", stats.f_seq[end])

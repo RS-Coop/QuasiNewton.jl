@@ -91,6 +91,8 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
         g2 = similar(grads)
         fg!(g2, x+ζ)
 
+        stats.g_evals += 1
+
         if any(isnan, g2)
             opt.M = R(1e-8)
         else
@@ -166,6 +168,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
     stats.converged = converged
     stats.iterations = iterations
     stats.f_evals += iterations + 1
+    stats.g_evals += iterations + 1
     stats.hvp_evals = H.nprod
     stats.run_time = elapsed(tic)
 

@@ -22,12 +22,18 @@ function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
     function dϕ(t)
         stats.f_evals += 1
         fg!(g, x+t*p)
+        
+        stats.g_evals += 1
+
         return dot(g, p)
     end
 
     function ϕdϕ(t)
         stats.f_evals += 1
         phi = fg!(g, x+t*p)
+
+        stats.g_evals += 1
+
         dphi = dot(g, p)
         return (phi, dphi)
     end  
