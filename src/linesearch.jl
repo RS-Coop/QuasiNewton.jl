@@ -109,7 +109,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
     λ = iszero(opt.M) ? zero(g_norm) : max(min(R(1e16), R(opt.M)*g_norm), eps(R))
     
     #Increase step-size
-    η = 2.0
+    η = 1.0
 
     #Scale search direction and norm
     p .*= η
@@ -130,7 +130,8 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
 
         if f(x+p)-fval ≤ dec
             #Update regularization
-            opt.M = max(min(R(1e8), R(opt.M)/η^2), R(1e-8))
+            # opt.M = max(min(R(1e8), R(opt.M)/η^2), R(1e-8))
+            η < 1. ? opt.M *= 2. : opt.M /= 2.
             break
         else
             η *= opt.α #reduce step-size
