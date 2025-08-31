@@ -84,6 +84,8 @@ function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_
         # status = false #NOTE: Not setting this to false, as we don't want to exit
     end
 
+    stats.f_evals += 1
+
     return status
 end
 
