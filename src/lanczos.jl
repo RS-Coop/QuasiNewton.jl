@@ -7,46 +7,46 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 	m, n = size(A)
 
 	β₁ = zero(R)
-	V = Matrix{R}(undef, n, k+1)
+	Q = Matrix{R}(undef, n, k+1)
 
 	d = zeros(R, k)
 	dl = zeros(R, k)
 
 	for i = 1:k
-		vᵢ = view(V,:,i)
-		vᵢ₊₁ = q = view(V,:,i+1)
+		qᵢ = view(Q,:,i)
+		qᵢ₊₁ = q = view(Q,:,i+1)
 
 		if i == 1
 			β₁ = norm(b)
 			if β₁ == 0
 				!allow_breakdown && error("Exact breakdown β₁ == 0.")
-				fill!(vᵢ, zero(R))
+				fill!(qᵢ, zero(R))
 			else
-				@. vᵢ = b/β₁
+				@. qᵢ = b/β₁
 			end
 		end
 
-		mul!(q, A, vᵢ)
+		mul!(q, A, qᵢ)
 
 		if i ≥ 2
-			vᵢ₋₁ = view(V,:,i-1)
+			qᵢ₋₁ = view(Q,:,i-1)
 			βᵢ = dl[i-1] #βᵢ = Tᵢ.ᵢ₋₁
-			axpy!(-βᵢ, vᵢ₋₁, q)
+			axpy!(-βᵢ, qᵢ₋₁, q)
 		end
 
-		αᵢ = dot(vᵢ, q)
-		axpy!(-αᵢ, vᵢ, q)
+		αᵢ = dot(qᵢ, q)
+		axpy!(-αᵢ, qᵢ, q)
 
 		if reorthogonalization
 			if i ≥ 2
-				vᵢ₋₁ = view(V,:,i-1)
-				βtmp = dot(vᵢ₋₁, q)
+				qᵢ₋₁ = view(Q,:,i-1)
+				βtmp = dot(qᵢ₋₁, q)
 				dl[i-1] += βtmp
-				axpy!(-βtmp, vᵢ₋₁, q)
+				axpy!(-βtmp, qᵢ₋₁, q)
 			end
-			αtmp = dot(vᵢ, q)
+			αtmp = dot(qᵢ, q)
 			αᵢ += αtmp
-			axpy!(-αtmp, vᵢ, q)
+			axpy!(-αtmp, qᵢ, q)
 		end
 
 		d[i] = αᵢ #Tᵢ.ᵢ = αᵢ
@@ -54,13 +54,13 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 
 		if βᵢ₊₁ == 0
 			!allow_breakdown && error("Exact breakdown βᵢ₊₁ == 0 at iteration i = $i.")
-			fill!(vᵢ₊₁, zero(R))
+			fill!(qᵢ₊₁, zero(R))
 		else
-			@. vᵢ₊₁ = q/βᵢ₊₁
+			@. qᵢ₊₁ = q/βᵢ₊₁
 		end
 
 		dl[i] = βᵢ₊₁ #Tᵢ₊₁.ᵢ = βᵢ₊₁
 	end
 
-	return V, SymTridiagonal(d, dl[1:end-1]), dl[end]
+	return Q, SymTridiagonal(d, dl[1:end-1]), dl[end]
 end

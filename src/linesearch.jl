@@ -43,7 +43,7 @@ function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
     p .*= α
 
     if !iszero(opt.M)
-        opt.M = α == 1. ? 2*R(opt.M) : max(min(R(1e8), R(opt.M)/α^2), R(1e-8))
+        opt.M = isone(α) ? max(R(opt.M)/2, R(1e-8)) : min(2*R(opt.M), R(1e8))
     end
 
     return status
@@ -68,12 +68,12 @@ function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_
     p = opt.solver.p
     p_norm = sqrt(dot(p,p))
     status = true
-    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(1e16), R(opt.M)*g_norm), eps(R))
+    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(opt.M)*g_norm, R(1e16)), eps(R))
 
     #Target decrement
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
-    if p_norm ≥ eps(R) && f(x+p)-fval ≤ dec #success
+    if p_norm ≥ sqrt(eps(R)) && f(x+p)-fval ≤ dec #success
         opt.M = max(R(opt.M)/2, R(1e-8)) #decrease regularization
 
     else #failure
@@ -108,7 +108,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
     p = opt.solver.p
     p_norm = sqrt(dot(p,p))
     status = true
-    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(1e16), R(opt.M)*g_norm), eps(R))
+    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(opt.M)*g_norm, R(1e16)), eps(R))
     
     #Increase step-size
     η = 1.0
@@ -123,7 +123,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
     #Check search direction
     if p_norm < sqrt(eps(R))
         status = false
-        opt.M = 1e-8
+        # opt.M = 1e-8
     end
 
     #NOTE: Can we just iteratively update x, is that even that much better?
@@ -132,8 +132,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
 
         if f(x+p)-fval ≤ dec
             #Update regularization
-            # opt.M = max(min(R(1e8), R(opt.M)/η^2), R(1e-8))
-            η < 1. ? opt.M *= 2. : opt.M /= 2.
+            opt.M = isone(η) ? max(R(opt.M)/2, R(1e-8)) : min(2*R(opt.M), R(1e8))
             break
         else
             η *= opt.α #reduce step-size
@@ -144,7 +143,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
         #Check step-size
         if η < sqrt(eps(R))
             status = false
-            opt.M = 1e-8
+            # opt.M = 1e-8
         end
     end
 

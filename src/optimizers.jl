@@ -39,8 +39,6 @@ function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch!::F=
     #Linesearch parameters
     if isnothing(linesearch!)
         @assert 0<η && η≤1
-    else
-        @assert 0<η && η≤1
     end
 
     #Solver
@@ -85,8 +83,8 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
     #Linesearch parameters
     if isnothing(linesearch!)
         @assert 0<η && η≤1
-    else
-        @assert 0<η && η≤1
+    elseif iszero(M)
+        linesearch! = backtrack!
     end
 
     #Solver

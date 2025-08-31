@@ -37,7 +37,7 @@ end
 function step!(solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(R(1e16), R(M)*g_norm), eps(R))
+    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
 
     push!(stats.λ_seq, λ)
 
@@ -91,7 +91,7 @@ end
 function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; depth::Int=solver.depth, tol::R=NaN, time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(R(1e16), R(M)*g_norm), eps(R))
+    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
 
     push!(stats.λ_seq, λ)
 
@@ -169,7 +169,7 @@ end
 function step!(solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; time_limit=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(R(1e16), R(M)*g_norm), eps(R))
+    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
 
     push!(stats.λ_seq, λ)
 
