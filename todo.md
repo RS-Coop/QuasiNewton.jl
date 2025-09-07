@@ -18,7 +18,8 @@ With noise 1e-6, there are only a couple of problem failures.
 # Features
 - ADHvpOperator mul! without having to convert to Vector
 - Custom Newton linesearch
-- What happens if M linesearch fails too many times
+- Alternate M update from Mishchenko
+- Regularization backtrack without skipping updates
 - What happens if krylov processes for Newton or RN haven't converged?
 - It would be nice to only use LinearOperator.jl, but they have no way of updating the operator in place
 - Krylov subspace recycling
