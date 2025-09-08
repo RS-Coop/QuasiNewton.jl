@@ -43,7 +43,7 @@ function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
     p .*= α
 
     if !iszero(opt.M)
-        opt.M = isone(α) ? max(R(opt.M)/2, R(1e-8)) : min(2*R(opt.M), R(1e8))
+        opt.M = isone(α) ? max(R(opt.M)*opt.α, R(1e-8)) : min(R(opt.M)/opt.α, R(1e8))
     end
 
     return status
@@ -74,10 +74,10 @@ function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     if p_norm ≥ sqrt(eps(R)) && f(x+p)-fval ≤ dec #success
-        opt.M = max(R(opt.M)/2, R(1e-8)) #decrease regularization
+        opt.M = max(R(opt.M)*opt.α, R(1e-8)) #decrease regularization
 
     else #failure
-        opt.M = min(R(opt.M)*2, R(1e8)) #increase regularization
+        opt.M = min(R(opt.M)/opt.α, R(1e8)) #increase regularization
 
         p .= zero(R)
 
@@ -132,7 +132,7 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
 
         if f(x+p)-fval ≤ dec
             #Update regularization
-            opt.M = isone(η) ? max(R(opt.M)/2, R(1e-8)) : min(2*R(opt.M), R(1e8))
+            opt.M = isone(η) ? max(R(opt.M)*opt.α, R(1e-8)) : min(R(opt.M)/opt.α, R(1e8))
             break
         else
             η *= opt.α #reduce step-size
