@@ -121,9 +121,8 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
     z = dot(E.vectors[solver.rank,:], cache1)
 
-    @views r = -g_norm*βₖ₊₁*z*Q[:,solver.rank+1]
-
-    r_norm = sqrt(dot(r, r))
+    r_norm = -g_norm*βₖ₊₁*z
+    @views r = r_norm*Q[:,solver.rank+1]
 
     #Tolerance
     if isnan(tol)
