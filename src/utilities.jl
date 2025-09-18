@@ -27,22 +27,45 @@ mutable struct Stats{I<:Integer, R<:Real}
 end
 
 function Stats(type::Type{<:Real})
-    return Stats(false, 0, 0, 0, 0, 0.0, type[], type[], type[], type[], type[], "")
+    return Stats(false, 0, 0, 0, 0, 0.0, type[], type[], type[], type[], type[], "Nominal")
 end
 
 function Base.show(io::IO, stats::Stats)
     @printf(io, "Converged:               %9s\n", stats.converged)
     @printf(io, "Iterations:              %9d\n", stats.iterations)
-    @printf(io, "Function Evals:          %9d\n", stats.f_evals)
-    @printf(io, "Gradient Evals:          %9d\n", stats.g_evals)
-    @printf(io, "Hvp Evals:               %9d\n", stats.hvp_evals)
     @printf(io, "Run Time (s):            %9.2e\n", stats.run_time)
-    @printf(io, "Minimum:                 %9.3e\n", stats.f_seq[end])
-    @printf(io, "Gradient Norm:           %9.3e\n", norm(stats.g_seq[end]))
-    @printf(io, "Max/Avg. Residual Norm:  %9.3e, %.3e\n", maximum(stats.r_seq; init=0.), mean(stats.r_seq))
-    @printf(io, "Max/Avg. Regularization: %9.3e, %.3e\n", maximum(stats.λ_seq; init=0.), mean(stats.λ_seq))
-    @printf(io, "Avg. Krylov Iterations:  %9.3e\n", mean(stats.krylov_iterations))
-    @printf(io, "Status:                  %s\n", stats.status)
+    @printf(io, "Minimum:                 %9.2e\n", length(stats.f_seq) != 0 ? stats.f_seq[end] : NaN)
+    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? norm(stats.g_seq[end]) : NaN)
+    
+    println()
+
+    @printf(io, "Evaluations:\n")
+    @printf(io, "      Total:             %9d\n", stats.f_evals+stats.g_evals+stats.hvp_evals)
+    @printf(io, "   Function:             %9d\n", stats.f_evals)
+    @printf(io, "   Gradient:             %9d\n", stats.g_evals)
+    @printf(io, "    Hessian:             %9d\n", stats.hvp_evals)
+
+    println()
+    
+    @printf(io, "Residual Norm:\n")
+    @printf(io, "          Max:           %9.2e\n", maximum(stats.r_seq; init=NaN))
+    @printf(io, "          Avg:           %9.2e\n", mean(stats.r_seq))
+    
+    println()
+
+    @printf(io, "Regularization:\n")
+    @printf(io, "          Max:           %9.2e\n", maximum(stats.λ_seq; init=NaN))
+    @printf(io, "          Avg:           %9.2e\n", mean(stats.λ_seq))
+
+    println()
+    
+    @printf(io, "Krylov Iterations:\n")
+    @printf(io, "          Max:           %9.2e\n", maximum(stats.krylov_iterations; init=NaN))
+    @printf(io, "          Avg:           %9.2e\n", mean(stats.krylov_iterations))
+
+    println()
+
+    @printf(io, "Status:                  %s", stats.status)
 end
 
 #########################################################
