@@ -48,24 +48,24 @@ function Base.show(io::IO, stats::Stats)
     println()
     
     @printf(io, "Residual Norm:\n")
-    @printf(io, "          Max:           %9.2e\n", maximum(stats.r_seq; init=NaN))
+    @printf(io, "          Max:           %9.2e\n", maximum(stats.r_seq; init=0.))
     @printf(io, "          Avg:           %9.2e\n", mean(stats.r_seq))
     
     println()
 
     @printf(io, "Regularization:\n")
-    @printf(io, "          Max:           %9.2e\n", maximum(stats.λ_seq; init=NaN))
+    @printf(io, "          Max:           %9.2e\n", maximum(stats.λ_seq; init=0.))
     @printf(io, "          Avg:           %9.2e\n", mean(stats.λ_seq))
 
     println()
     
     @printf(io, "Krylov Iterations:\n")
-    @printf(io, "          Max:           %9.2e\n", maximum(stats.krylov_iterations; init=NaN))
+    @printf(io, "          Max:           %9.2e\n", maximum(stats.krylov_iterations; init=0))
     @printf(io, "          Avg:           %9.2e\n", mean(stats.krylov_iterations))
 
     println()
 
-    @printf(io, "Status:                  %s", stats.status)
+    @printf(io, "Status:                  %s\n", stats.status)
 end
 
 #########################################################

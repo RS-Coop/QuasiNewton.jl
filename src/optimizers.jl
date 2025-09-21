@@ -31,20 +31,20 @@ Input:
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
 =#
-function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch!::F=backtrack!, η::R2=1.0, α::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
+function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
 
     #Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
 
     #Linesearch parameters
-    if isnothing(linesearch!)
+    if isnothing(linesearch)
         @assert 0<η && η≤1
     end
 
     #Solver
     solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
-    return NewtonOptimizer(solver, M, linesearch!, η, atol, rtol)
+    return NewtonOptimizer(solver, M, linesearch, η, atol, rtol)
 end
 
 #########################################################
@@ -75,22 +75,22 @@ Input:
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
 =#
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch!::F=search_η!, η::R2=1.0, α::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     #Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
 
     #Linesearch parameters
-    if isnothing(linesearch!)
+    if isnothing(linesearch)
         @assert 0<η && η≤1
     elseif iszero(M)
-        linesearch! = backtrack!
+        linesearch = backtrack!
     end
 
     #Solver
     solver_ = solver(dim; kwargs...)
 
-    return RSFNOptimizer(solver_, M, linesearch!, η, α, atol, rtol)
+    return RSFNOptimizer(solver_, M, linesearch, η, α, atol, rtol)
 end
 
 #########################################################
