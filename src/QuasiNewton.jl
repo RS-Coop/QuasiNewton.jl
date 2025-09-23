@@ -61,7 +61,7 @@ function newton!(x::S, f::F, ad_backend; itmax::Int=1000, time_limit=Inf, kwargs
 	return stats
 end
 
-function newton!(x::S, f::F1, fg!::F2, H::M; itmax::Int=1000, time_limit=Inf) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M}
+function newton!(x::S, f::F1, fg!::F2, H::M; itmax::Int=1000, time_limit=Inf, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M}
 	opt = NewtonOptimizer(size(x,1); kwargs...)
 
 	stats = minimize!(opt, x, f, fg!, H; itmax=itmax, time_limit=time_limit)
