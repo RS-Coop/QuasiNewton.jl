@@ -16,6 +16,7 @@ mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:
     M::R1 #hessian regularization scaling
     const linesearch!::F #linesearch function
     const η::R2 #step-size
+    const α::R2 #linesearch factor
     const atol::R2 #absolute gradient norm tolerance
     const rtol::R2 #relative gradient norm tolerance
 end
@@ -44,7 +45,7 @@ function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=b
     #Solver
     solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
-    return NewtonOptimizer(solver, M, linesearch, η, atol, rtol)
+    return NewtonOptimizer(solver, M, linesearch, η, α, atol, rtol)
 end
 
 #########################################################
