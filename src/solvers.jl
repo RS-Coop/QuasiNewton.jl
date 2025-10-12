@@ -111,17 +111,20 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     cache2 = similar(g, solver.rank)
 
     #Update search direction
-    @views @. cache1 = (pinv(sqrt(E.values^2+λ)) - pinv(sqrt(λ)))*E.vectors[1,:]
+    ω = pinv(sqrt(E.values^2+λ))
+    s = pinv(sqrt(λ))
+
+    @views @. cache1 = (ω - s)*E.vectors[1,:]
     mul!(cache2, E.vectors, cache1)
 
     @views mul!(solver.p, Q[:,1:solver.rank], cache2, -g_norm, 1.)
-    solver.p .-= pinv(sqrt(λ))*g
+    solver.p .-= s*g
 
     #Compute residual
-    @views @. cache1 = pinv(sqrt(E.values^2+λ))*E.vectors[1,:]
+    @views @. cache1 = ω*E.vectors[1,:]
     z = dot(E.vectors[solver.rank,:], cache1)
 
-    r_norm = -g_norm*βₖ₊₁*z
+    r_norm = g_norm*βₖ₊₁*z #NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
     @views r = r_norm*Q[:,solver.rank+1]
 
     #Tolerance
