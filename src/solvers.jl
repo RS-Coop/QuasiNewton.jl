@@ -96,7 +96,7 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     push!(stats.λ_seq, λ)
 
     #Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(H, g, solver.rank, allow_breakdown=true, reorthogonalization=true)
+    Q, T, βₖ₊₁ = lanczos(H, g, solver.rank, allow_breakdown=true, reorthogonalization=false)
 
     #Symmetric tridgiagonal eigendecomposition
     #NOTE: stegr might be faster but is prone to errors
@@ -124,8 +124,9 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     @views @. cache1 = E.values*E.vectors[1,:]
     z = dot(E.vectors[solver.rank,:], cache1)
 
-    r_norm = abs(g_norm*βₖ₊₁*z) #NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
-    @views r = sign(z)*r_norm*Q[:,solver.rank+1]
+    r_norm = g_norm*βₖ₊₁*z #NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
+    @views r = r_norm*Q[:,solver.rank+1]
+    r_norm = abs(r_norm)
 
     #Tolerance
     if isnan(tol)
