@@ -6,17 +6,17 @@ SFN optimizer.
 
 #########################################################
 
-#=
+"""
 Repeatedly applies the SFN iteration to minimize the function.
 
 Input:
     opt :: SFNOptimizer
     x :: initialization
     f :: scalar valued function
-    itmax :: maximum iterations
-    time_limit :: maximum run time
-=#
-@inline function minimize!(opt::O, x::S, f::F, ad_backend; itmax::Int=1000, time_limit=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F<:Function}
+    max_iter :: maximum iterations
+    max_time :: maximum run time
+"""
+@inline function minimize!(opt::O, x::S, f::F, ad_backend; max_iter::Int=1000, max_time=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F<:Function}
     #Autodiff
     H = ADHvpOperator(f, x, ad_backend)
 
@@ -24,14 +24,14 @@ Input:
     fg! = (g,x) -> value_and_gradient!(f, g, prep, ad_backend, x)[1]
 
     #Iterate
-    stats = iterate!(opt, x, f, fg!, H, itmax, time_limit)
+    stats = iterate!(opt, x, f, fg!, H, max_iter, max_time)
 
     return stats
 end
 
 #########################################################
 
-#=
+"""
 Repeatedly applies the SFN iteration to minimize the function.
 
 Input:
@@ -40,22 +40,22 @@ Input:
     f :: scalar valued function
     g! :: inplace gradient function of f
     H :: hvp generator
-    itmax :: maximum iterations
-    time_limit :: maximum run time
-=#
-@inline function minimize!(opt::O, x::S, f::F1, fg!::F2, Hf::F3; itmax::Int=1000, time_limit=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, F3<:Function}
+    max_iter :: maximum iterations
+    max_time :: maximum run time
+"""
+@inline function minimize!(opt::O, x::S, f::F1, fg!::F2, Hf::F3; max_iter::Int=1000, max_time=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, F3<:Function}
     #LinearOperator
     H = LHvpOperator(Hf, x)
 
     #iterate
-    stats = iterate!(opt, x, f, fg!, H, itmax, time_limit)
+    stats = iterate!(opt, x, f, fg!, H, max_iter, max_time)
 
     return stats
 end
 
 #########################################################
 
-#=
+"""
 Repeatedly applies the SFN iteration to minimize the function.
 
 Input:
@@ -64,10 +64,10 @@ Input:
     f :: scalar valued function
     fg! :: compute f and gradient norm after inplace update of gradient
     H :: hvp operator
-    itmax :: maximum iterations
-    time_limit :: maximum run time
-=#
-function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) where {O<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, F1<:Function, F2<:Function, Hv<:HvpOperator}
+    max_iter :: maximum iterations
+    max_time :: maximum run time
+"""
+function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time) where {O<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, F1<:Function, F2<:Function, Hv<:HvpOperator}
     #Start time
     tic = time_ns()
     
@@ -113,7 +113,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
     push!(stats.g_seq, g_norm)
 
     #Iterate
-    while iterations ≤ itmax
+    while iterations ≤ max_iter
 
         #Check gradient norm
         if g_norm <= tol
@@ -124,10 +124,10 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
         #Check other exit conditions
         time = elapsed(tic)
 
-        if time>=time_limit
+        if time >= max_time
             stats.status = "Time limit exceeded"
             break
-        elseif iterations==itmax
+        elseif iterations == max_iter
             stats.status = "Maximum iterations exceeded"
             break
         end
@@ -138,7 +138,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
         fill!(opt.solver.p, zero(R))
 
         #Solve for search direction
-        step!(opt.solver, stats, H, grads, g_norm, opt.M; time_limit=time_limit-time)
+        step!(opt.solver, stats, H, grads, g_norm, opt.M; max_time=max_time-time)
 
         #Linesearch
         if !opt.linesearch!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
@@ -170,7 +170,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, itmax::Int, time_limit) w
     stats.f_evals += iterations + 1
     stats.g_evals += iterations + 1
     stats.hvp_evals = H.nprod
-    stats.run_time = elapsed(tic)
+    stats.runtime = elapsed(tic)
 
     return stats
 end

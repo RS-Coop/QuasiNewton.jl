@@ -8,9 +8,9 @@ abstract type QuasiNewtonOptimizer end
 
 #########################################################
 
-#=
+"""
 (Regularized) Newton optimizer.
-=#
+"""
 mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
     solver::Q #search direction solver
     M::R1 #hessian regularization scaling
@@ -21,7 +21,7 @@ mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:
     const rtol::R2 #relative gradient norm tolerance
 end
 
-#=
+"""
 Constructor
 
 Input:
@@ -31,7 +31,7 @@ Input:
     linesearch :: whether to use linesearch
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
-=#
+"""
 function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
 
     #Hessian Lipschitz constant
@@ -51,9 +51,9 @@ end
 
 #########################################################
 
-#=
+"""
 Regularized Saddle-Free Newton (R-SFN) optimizer.
-=#
+"""
 mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
     solver::Q #search direction solver
     M::R1 #hessian regularization scaling
@@ -64,7 +64,7 @@ mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:Ab
     const rtol::R2 #relative gradient norm tolerance
 end
 
-#=
+"""
 Constructor
 
 Input:
@@ -76,7 +76,7 @@ Input:
     α :: linesearch factor in (0,1)
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
-=#
+"""
 function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     #Hessian Lipschitz constant
@@ -98,9 +98,9 @@ end
 
 #########################################################
 
-#=
+"""
 Adaptive Regularization with Cubics (ARC) optimizer.
-=#
+"""
 mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
     solver::Q #search direction solver
     M::R1 #
@@ -114,7 +114,7 @@ mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:Abs
     const rtol::R2 #relative gradient norm tolerance
 end
 
-#=
+"""
 Constructor
 
 Input:
@@ -126,7 +126,7 @@ Input:
     γ2::
     atol :: absolute gradient norm tolerance
     rtol :: relative gradient norm tolerance
-=#
+"""
 function ARCOptimizer(dim::Int; M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0.1, γ2::R2=5.0, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, R2<:AbstractFloat}
 
     #

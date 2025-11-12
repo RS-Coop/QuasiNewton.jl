@@ -65,7 +65,7 @@ Loading the package as usual
 ```julia
 using QuasiNewton
 ```
-will export four in-place optimization routines: `optimize!`, `newton!`, `rsfn!`, and `arc!`. We will only cover the details of the first, as it covers the others as well. The optimization algorithm can be specified via a symbol and depending on the function information provided, the method is dispatched to an AD or [LinearOperator.jl](https://jso.dev/LinearOperators.jl/latest/) based execution. All methods return a `Stats` object containing relevant information about the procedure, with some information only being stored if `history=true`.
+will export four in-place optimization routines: `minimize!`, `newton!`, `rsfn!`, and `arc!`. We will only cover the details of the first, as it covers the others as well. The optimization algorithm can be specified via a symbol and depending on the function information provided, the method is dispatched to an AD or [LinearOperator.jl](https://jso.dev/LinearOperators.jl/latest/) based execution. All methods return a `Stats` object containing relevant information about the procedure, with some information only being stored if `history=true`.
 
 First, we consider the following example of minimizing a simple least-squares problem with Newton's method.
 ```julia
@@ -84,7 +84,7 @@ function fg!(g, x) #computes gradient in-place and returns objective function
 end
 H(x) = LinearOperator(A'*A) #computes Hessian
 
-stats = optimize!(randn(d), f, fg!, H, Val(:newton);
+stats = minimize!(randn(d), f, fg!, H, Val(:newton);
 					itmax=100,
 					time_limit=60,
 					posdef=true,
@@ -96,7 +96,7 @@ Converged:                    true
 Iterations:                      1
 Function Evals:                  3
 Hvp Evals:                     151
-Run Time (s):             3.59e-02
+Runtime (s):              3.59e-02
 Minimum:                 1.600e-12
 Gradient Norm:           2.259e-05
 Max/Avg. Residual Norm:  0.000e+00, 0.000e+00
@@ -120,7 +120,7 @@ function rosenbrock(x) #objective function
 	return res
 end
 
-stats = optimize!(zeros(10), rosenbrock, Val(:rsfn), AutoEnzyme();
+stats = minimize!(zeros(10), rosenbrock, Val(:rsfn), AutoEnzyme();
 					itmax=100,
 					time_limit=60,
 					M=1e-8)
@@ -131,7 +131,7 @@ Converged:                    true
 Iterations:                     73
 Function Evals:                 74
 Hvp Evals:                     353
-Run Time (s):             3.30e-04
+Runtime (s):              3.30e-04
 Minimum:                 6.415e-12
 Gradient Norm:           1.458e-05
 Max/Avg. Residual Norm:  7.101e+00, 5.267e-01

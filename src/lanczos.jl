@@ -1,8 +1,12 @@
 #=
 Author: Cooper Simpson
-
-Adapted from Krylov.jl (src/krylov_processes.jl)
 =#
+
+#########################################################
+
+"""
+Adapted from Krylov.jl (src/krylov_processes.jl)
+"""
 function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
 	m, n = size(A)
 

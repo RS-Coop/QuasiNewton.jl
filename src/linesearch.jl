@@ -51,7 +51,7 @@ end
 
 ########################################################
 
-#=
+"""
 In place SFN regularization line-search
 
 Input:
@@ -61,7 +61,7 @@ Input:
     fval :: current function value
     λ :: regularization
     α :: float in (0,1)
-=#
+"""
 function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Setup
@@ -91,7 +91,7 @@ end
 
 ########################################################
 
-#=
+"""
 In place SFN step-size line-search
 
 Input:
@@ -101,7 +101,7 @@ Input:
     fval :: current function value
     λ :: regularization
     α :: float in (0,1)
-=#
+"""
 function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Setup
@@ -153,7 +153,7 @@ end
 
 ########################################################
 
-#=
+"""
 In place ARC search direction search
 
 Input:
@@ -163,7 +163,7 @@ Input:
     fval :: current function value
     λ :: regularization
     α :: float in (0,1)
-=#
+"""
 function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Cubic sub-problem
