@@ -85,8 +85,8 @@ end
 H(x) = LinearOperator(A'*A) #computes Hessian
 
 stats = minimize!(randn(d), f, fg!, H, Val(:newton);
-					itmax=100,
-					time_limit=60,
+					max_iter=100,
+					max_time=60,
 					posdef=true,
 					M=0.0)
 
@@ -94,15 +94,29 @@ show(stats)
 #=
 Converged:                    true
 Iterations:                      1
-Function Evals:                  3
-Hvp Evals:                     151
-Runtime (s):              3.59e-02
-Minimum:                 1.600e-12
-Gradient Norm:           2.259e-05
-Max/Avg. Residual Norm:  0.000e+00, 0.000e+00
-Max/Avg. Regularization: 0.000e+00, 0.000e+00
-Avg. Krylov Iterations:  1.510e+02
-Status:  
+Runtime (s):             7.25e-02
+Minimum:                  2.05e-13
+Gradient Norm:            7.75e-06
+
+Evaluations:
+      Total:                   157
+   Function:                     3
+   Gradient:                     2
+    Hessian:                   152
+
+Residual Norm:
+          Max:            0.00e+00
+          Avg:            0.00e+00
+
+Regularization:
+          Max:            0.00e+00
+          Avg:            0.00e+00
+
+Krylov Iterations:
+          Max:            1.52e+02
+          Avg:            1.52e+02
+
+Status:                  Nominal
 =#
 ```
 
@@ -121,23 +135,37 @@ function rosenbrock(x) #objective function
 end
 
 stats = minimize!(zeros(10), rosenbrock, Val(:rsfn), AutoEnzyme();
-					itmax=100,
-					time_limit=60,
+					max_iter=100,
+					max_time=60,
 					M=1e-8)
 
 show(stats)
 #=
 Converged:                    true
-Iterations:                     73
-Function Evals:                 74
-Hvp Evals:                     353
-Runtime (s):              3.30e-04
-Minimum:                 6.415e-12
-Gradient Norm:           1.458e-05
-Max/Avg. Residual Norm:  7.101e+00, 5.267e-01
-Max/Avg. Regularization: 1.288e+02, 1.264e+01
-Avg. Krylov Iterations:  4.836e+00
-Status:
+Iterations:                     30
+Runtime (s):             1.68e-04
+Minimum:                  7.04e-14
+Gradient Norm:            1.58e-06
+
+Evaluations:
+      Total:                   315
+   Function:                    80
+   Gradient:                    31
+    Hessian:                   204
+
+Residual Norm:
+          Max:            6.30e+00
+          Avg:            1.03e+00
+
+Regularization:
+          Max:            4.79e-07
+          Avg:            9.81e-08
+
+Krylov Iterations:
+          Max:            1.00e+01
+          Avg:            6.80e+00
+
+Status:                  Nominal
 =#
 ```
 

@@ -37,7 +37,7 @@ end
 function step!(solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
+    λ = iszero(M) ? zero(g_norm) : max(min(sqrt(R(M)*g_norm), R(1e16)), eps(R))
 
     push!(stats.λ_seq, λ)
 

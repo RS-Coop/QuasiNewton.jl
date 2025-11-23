@@ -14,6 +14,7 @@ With noise 1e-6, there are only a couple of problem failures.
 
 # Documentation
 - Docstrings, Julia->Documentation->Documentation
+- Non-square least squares problem for README example?
 
 # Features
 - ADHvpOperator mul! without having to convert to Vector
