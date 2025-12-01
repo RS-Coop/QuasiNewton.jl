@@ -41,6 +41,9 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 		αᵢ = dot(qᵢ, q)
 		axpy!(-αᵢ, qᵢ, q)
 
+		"""
+		Selective reorthogonalization against last two vectors.
+		"""
 		if reorthogonalization
 			if i ≥ 2
 				qᵢ₋₁ = view(Q,:,i-1)
@@ -48,6 +51,7 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 				dl[i-1] += βtmp
 				axpy!(-βtmp, qᵢ₋₁, q)
 			end
+
 			αtmp = dot(qᵢ, q)
 			αᵢ += αtmp
 			axpy!(-αtmp, qᵢ, q)
