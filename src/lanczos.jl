@@ -9,6 +9,7 @@ Adapted from Krylov.jl (src/krylov_processes.jl)
 """
 function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
 	m, n = size(A)
+	@assert m==n
 
 	β₁ = zero(R)
 	Q = Matrix{R}(undef, n, k+1)
