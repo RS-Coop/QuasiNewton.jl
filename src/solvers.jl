@@ -77,7 +77,7 @@ mutable struct LFASolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolv
     p::S #search direction
 end
 
-function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, rank::Int=Int(ceil(log(dim))), adapt::Bool=true, min_rank::Int=2, max_rank::Int=1000, depth::Int=1)
+function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, rank::Int=Int(ceil(log2(dim))), adapt::Bool=true, min_rank::Int=2, max_rank::Int=1000, depth::Int=1)
 
     if adapt
         min_rank, max_rank = min_rank, min(dim, max_rank)
