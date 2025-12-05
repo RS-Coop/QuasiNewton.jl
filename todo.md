@@ -20,10 +20,13 @@ With noise 1e-6, there are only a couple of problem failures.
 - ADHvpOperator mul! without having to convert to Vector
 - Custom Newton linesearch
 - Alternate M update from Mishchenko
+  - Or more robust M estimate with multiple random perturbations
 - Regularization backtrack without skipping updates
 - What happens if krylov processes for Newton or RN haven't converged?
 - It would be nice to only use LinearOperator.jl, but they have no way of updating the operator in place
 - Krylov subspace recycling
+- Block Lanczos
+- Better reorthogonalization?
 
 # Method Additions
 - Randomized coordinate projection (ARC and/or R-SFN)
