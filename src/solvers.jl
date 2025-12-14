@@ -70,25 +70,25 @@ end
 Regularized Saddle-Free Newton (R-SFN) solver using Lanczos function approximation.
 """
 mutable struct LFASolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
-    rank::Int #target rank
-    const min_rank::Int #minimum rank
-    const max_rank::Int #maximum rank
-    const depth::Int #recursion_depth
+    depth::Int #target krylov depth
+    const min_depth::Int #minimum krylov depth
+    const max_depth::Int #maximum krylov depth
+    const levels::Int #recursion levels
     p::S #search direction
 end
 
-function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, rank::Int=Int(ceil(log2(dim))), adapt::Bool=true, min_rank::Int=2, max_rank::Int=1000, depth::Int=1)
+function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=Int(ceil(log2(dim))), adapt::Bool=true, min_depth::Int=2, max_depth::Int=1000, levels::Int=1)
 
     if adapt
-        min_rank, max_rank = min_rank, min(dim, max_rank)
+        min_depth, max_depth = min_depth, min(dim, max_depth)
     else
-        min_rank, max_rank = rank, rank
+        min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(rank, min_rank, max_rank, depth, type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, levels, type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; depth::Int=solver.depth, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
     λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
@@ -96,7 +96,9 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     push!(stats.λ_seq, λ)
 
     #Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(H, g, solver.rank, allow_breakdown=true, reorthogonalization=false)
+    Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, allow_breakdown=true, reorthogonalization=false)
+
+    level == solver.levels ? push!(stats.krylov_iterations, solver.depth) : stats.krylov_iterations[end] += solver.depth
 
     #Symmetric tridgiagonal eigendecomposition
     #NOTE: stegr might be faster but is prone to errors
@@ -104,11 +106,9 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     # E = Eigen(LAPACK.stegr!('V', T.dv, T.ev)...)
     E = Eigen(LAPACK.stev!('V', T.dv, T.ev)...)
 
-    depth == solver.depth ? push!(stats.krylov_iterations, solver.rank) : stats.krylov_iterations[end] += solver.rank
-
     #Temporary memory, NOTE: Can you get away with just one of these?
-    cache1 = similar(g, solver.rank)
-    cache2 = similar(g, solver.rank)
+    cache1 = similar(g, solver.depth)
+    cache2 = similar(g, solver.depth)
 
     #Update search direction
     @. E.values = pinv(sqrt(E.values^2+λ))
@@ -117,15 +117,15 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     @views @. cache1 = (E.values - s)*E.vectors[1,:]
     mul!(cache2, E.vectors, cache1)
 
-    @views mul!(solver.p, Q[:,1:solver.rank], cache2, -g_norm, 1.)
+    @views mul!(solver.p, Q[:,1:solver.depth], cache2, -g_norm, 1.)
     solver.p .-= s*g
 
     #Compute residual
     @views @. cache1 = E.values*E.vectors[1,:]
-    z = dot(E.vectors[solver.rank,:], cache1)
+    z = dot(E.vectors[solver.depth,:], cache1)
 
     r_norm = g_norm*βₖ₊₁*z #NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
-    @views r = r_norm*Q[:,solver.rank+1]
+    @views r = r_norm*Q[:,solver.depth+1]
     r_norm = abs(r_norm)
 
     #Tolerance
@@ -140,22 +140,76 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     end
     
     #Rank change
-    if solver.min_rank != solver.max_rank
-        if r_norm ≥ tol && depth == 1
-            solver.rank = min(solver.max_rank, solver.rank*2)
-        elseif r_norm ≤ R(1e-2)*tol && depth == solver.depth
-            solver.rank = max(solver.min_rank, div(solver.rank, 2))
+    if solver.min_depth != solver.max_depth
+        if r_norm ≥ tol && level == 1
+            solver.depth = min(solver.max_depth, solver.depth*2)
+        elseif r_norm ≤ R(1e-2)*tol && level == solver.levels
+            solver.depth = max(solver.min_depth, div(solver.depth, 2))
         end
     end
 
     #Recurse
-    if depth > 1 && r_norm ≥ tol
-        step!(solver, stats, H, r, r_norm, M; depth=depth-1, tol=tol, max_time=max_time)
+    if level > 1 && r_norm ≥ tol
+        step!(solver, stats, H, r, r_norm, M; level=level-1, tol=tol, max_time=max_time)
     else
         push!(stats.r_seq, r_norm)
     end
 
     return
+end
+
+"""
+Regularized Saddle-Free Newton (R-SFN) solver using block Lanczos function approximation.
+"""
+mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}  <: QuasiNewtonSolver
+    depth::Int #krylov depth
+    block_size::Int #krylov block size
+    Ω::M #block RHS
+    p::S #search direction
+end
+
+function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=Int(floor(log2(dim))), block_size::Int=2)
+    if block_size > dim
+        block_size = min(dim÷depth, block_size)
+    end
+
+    return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim))
+end
+
+function step!(solver::BlockLFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+
+    #Regularization
+    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
+
+    push!(stats.λ_seq, λ)
+
+    #Block Lanczos + eigendecomposition
+    solver.Ω[:,1] = g
+
+    block_depth = solver.block_size*solver.depth #total size i.e. "rank"
+
+    Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalization=true)
+
+    push!(stats.krylov_iterations, solver.depth)
+
+    E = eigen(T) #Maybe replace this with LAPACK block diagonal solve
+
+    # println(E.values)
+
+    #Update search direction
+    cache1 = similar(g, block_depth)
+    cache2 = similar(g, block_depth)
+
+    @. E.values = pinv(sqrt(E.values^2+λ))
+    s = pinv(sqrt(λ))
+
+    @views @. cache1 = (E.values - s)*E.vectors[1,:]
+    mul!(cache2, E.vectors, cache1)
+
+    @views mul!(solver.p, Q, cache2, -B1[1,1], 1.)
+    solver.p .-= s*g
+
+	return
 end
 
 """
