@@ -1,14 +1,9 @@
-
-# Symmetric tridiagonal eigensolve
-stegr!, which is the default symmetric tridiagonal eigensolver, can often fail due to some LAPACK error. This can be somewhat mitigated by using stev! instead.
-
-Doing the diagonal perturbation seems to mostly help, but it can alter the result. Seems to be error introduced by magnitude of the perturbation.
-
-With noise 1e-6, there are only a couple of problem failures.
-
 # Improvements
 - Make sure typing and casting is all good
 - Typing of M?
+- Should we be reorthogonalizing in Lanczos?
+  - Does this let us use `stegr`?
+- Do we need the tolerance we are asking for in LFA?
 
 # Documentation
 - Docstrings, Julia->Documentation->Documentation
