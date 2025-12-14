@@ -35,7 +35,7 @@ function Base.show(io::IO, stats::Stats)
     @printf(io, "Iterations:              %9d\n", stats.iterations)
     @printf(io, "Runtime (s):            %9.2e\n", stats.runtime)
     @printf(io, "Minimum:                 %9.2e\n", length(stats.f_seq) != 0 ? stats.f_seq[end] : NaN)
-    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? norm(stats.g_seq[end]) : NaN)
+    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? stats.g_seq[end] : NaN)
     
     println()
 
@@ -75,3 +75,13 @@ Timer
 https://github.com/JuliaSmoothOptimizers/Krylov.jl/blob/main/src/krylov_utils.jl
 =#
 elapsed(tic::UInt64) = (time_ns()-tic)/1e9
+
+#########################################################
+"""
+Fast 2-norm with type conversion.
+"""
+@inline function norm2(x::AbstractVector{R}) where {R}
+    y = dot(x, x)
+    return convert(R, sqrt(y))
+end
+

@@ -34,10 +34,10 @@ end
     return posdef ? newton_solver(dim, type, krylov_order, Val(true)) : newton_solver(dim, type, krylov_order, Val(false))
 end
 
-function step!(solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::O, solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R; max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(sqrt(R(M)*g_norm), R(1e16)), eps(R))
+    λ = regularizer(opt, g_norm)
 
     push!(stats.λ_seq, λ)
 
@@ -88,10 +88,10 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return LFASolver(depth, min_depth, max_depth, levels, type(undef, dim))
 end
 
-function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::O, solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
+    λ = regularizer(opt, g_norm)
 
     push!(stats.λ_seq, λ)
 
@@ -150,7 +150,7 @@ function step!(solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
 
     #Recurse
     if level > 1 && r_norm ≥ tol
-        step!(solver, stats, H, r, r_norm, M; level=level-1, tol=tol, max_time=max_time)
+        step!(opt, solver, stats, H, r, r_norm; level=level-1, tol=tol, max_time=max_time)
     else
         push!(stats.r_seq, r_norm)
     end
@@ -176,10 +176,10 @@ function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=
     return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim))
 end
 
-function step!(solver::BlockLFASolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::O, solver::BlockLFASolver, stats::Stats, H::Hv, g::S, g_norm::R; tol::R=NaN, max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
+    λ = regularizer(opt, g_norm)
 
     push!(stats.λ_seq, λ)
 
@@ -217,24 +217,22 @@ Regularized Saddle-Free Newton (R-SFN) solver using full eigendecomposition.
 """
 mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
     p::S #search direction
+    cache::S #temporary memory
 end
 
 function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64})
-    return EigenSolver(type(undef, dim))
+    return EigenSolver(type(undef, dim), type(undef, dim))
 end
 
-function step!(solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::O, solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R; max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
-    λ = iszero(M) ? zero(g_norm) : max(min(R(M)*g_norm, R(1e16)), eps(R))
+    λ = regularizer(opt, g_norm)
 
     push!(stats.λ_seq, λ)
 
     #Eigendecomposition
     E = eigen!(Matrix(H))
-
-    #Temporary memory
-    cache = similar(g)
 
     #Update search direction
     mul!(cache, E.vectors', -g)
@@ -267,7 +265,7 @@ function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
 end
 
-function step!(solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::O, solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R; max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Tolerance
     ζ = 0.5
@@ -279,7 +277,7 @@ function step!(solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R, M::Real;
     #Solver callback, exits when at least one solution that will work has been found
     cb = (slv) -> begin
         for i = eachindex(solver.shifts)
-            if !slv.not_cv[i] && (norm(slv.x[i]) / solver.shifts[i] - M > 0)
+            if !slv.not_cv[i] && (norm(slv.x[i]) / solver.shifts[i] - opt.M > 0)
                 return true
             end
         end

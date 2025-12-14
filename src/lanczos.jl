@@ -9,9 +9,9 @@ Scalar Lanczos process.
 
 NOTE: Adapted from Krylov.jl (src/krylov_processes.jl)
 """
-function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
 	m, n = size(A)
-	@assert m==n
+	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
 
 	β₁ = zero(R)
 	Q = Matrix{R}(undef, n, k+1)
@@ -24,12 +24,13 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 		qᵢ₊₁ = q = view(Q,:,i+1)
 
 		if i == 1
-			β₁ = norm(b)
+            β₁ = norm2(b)
 			if β₁ == 0
 				!allow_breakdown && error("Exact breakdown β₁ == 0.")
 				fill!(qᵢ, zero(R))
 			else
-				@. qᵢ = b/β₁
+                copyto!(qᵢ, b)
+                rmul!(qᵢ, inv(β₁))
 			end
 		end
 
@@ -61,13 +62,14 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 		end
 
 		d[i] = αᵢ #Tᵢ.ᵢ = αᵢ
-		βᵢ₊₁ = norm(q)
+		βᵢ₊₁ = norm2(q)
 
-		if βᵢ₊₁ == 0
-			!allow_breakdown && error("Exact breakdown βᵢ₊₁ == 0 at iteration i = $i.")
+		if βᵢ₊₁ ≤ eps(R)
+			!allow_breakdown && error("Breakdown βᵢ₊₁ ≤ eps at iteration i = $i.")
 			fill!(qᵢ₊₁, zero(R))
 		else
-			@. qᵢ₊₁ = q/βᵢ₊₁
+            copyto!(qᵢ₊₁, q)
+            rmul!(qᵢ₊₁, inv(βᵢ₊₁))
 		end
 
 		dl[i] = βᵢ₊₁ #Tᵢ₊₁.ᵢ = βᵢ₊₁
@@ -84,7 +86,8 @@ NOTE: Adapted from Krylov.jl (src/block_krylov_processes.jl)
 function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalization::Bool=false) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
     m, n = size(Z)
 	p, b = size(Ω)
-	@assert m==n && n==p
+    m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
+    n == p || throw(DimensionMismatch("Lanczos requires a compatible block"))
 
 	#preallocate
     Q = zeros(R, n, (k+1)*b)

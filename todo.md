@@ -8,8 +8,6 @@ With noise 1e-6, there are only a couple of problem failures.
 
 # Improvements
 - Make sure typing and casting is all good
-- Cannonical/Unified regularization calculation?
-- Centralized fast norm?
 - Typing of M?
 
 # Documentation

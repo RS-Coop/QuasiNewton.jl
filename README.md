@@ -94,15 +94,15 @@ show(stats)
 #=
 Converged:                    true
 Iterations:                      1
-Runtime (s):             7.25e-02
-Minimum:                  2.05e-13
-Gradient Norm:            7.75e-06
+Runtime (s):             1.96e-04
+Minimum:                  8.22e-13
+Gradient Norm:            1.38e-05
 
 Evaluations:
-      Total:                   157
+      Total:                   159
    Function:                     3
    Gradient:                     2
-    Hessian:                   152
+    Hessian:                   154
 
 Residual Norm:
           Max:            0.00e+00
@@ -113,8 +113,8 @@ Regularization:
           Avg:            0.00e+00
 
 Krylov Iterations:
-          Max:            1.52e+02
-          Avg:            1.52e+02
+          Max:            1.54e+02
+          Avg:            1.54e+02
 
 Status:                  Nominal
 =#

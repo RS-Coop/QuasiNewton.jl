@@ -66,9 +66,9 @@ function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_
 
     #Setup
     p = opt.solver.p
-    p_norm = sqrt(dot(p,p))
+    p_norm = norm2(p)
     status = true
-    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(opt.M)*g_norm, R(1e16)), eps(R))
+    λ = regularizer(opt, g_norm)
 
     #Target decrement
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
@@ -106,9 +106,9 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
 
     #Setup
     p = opt.solver.p
-    p_norm = sqrt(dot(p,p))
+    p_norm = norm2(p)
     status = true
-    λ = iszero(opt.M) ? zero(g_norm) : max(min(R(opt.M)*g_norm, R(1e16)), eps(R))
+    λ = regularizer(opt, g_norm)
     
     #Increase step-size
     η = 1.0
@@ -167,8 +167,8 @@ Input:
 function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Cubic sub-problem
-    cubic_subprob = (d) -> begin
-        res = similar(g)
+    res = similar(g)
+    @inline cubic_subprob = (d) -> begin
         mul!(res, H, d)
         return fval + dot(g,d) + 0.5*dot(d, res)
     end
@@ -202,7 +202,7 @@ function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval
                     shift_failure = true
                     break
                 end
-                M_new = norm(X[j+1])/opt.solver.shifts[j+1]
+                M_new = norm2(X[j+1])/opt.solver.shifts[j+1]
                 j += 1
             end
             

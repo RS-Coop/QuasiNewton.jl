@@ -49,6 +49,13 @@ function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=b
     return NewtonOptimizer(solver, M, linesearch, η, α, atol, rtol)
 end
 
+"""
+Compute regularization parameter.
+"""
+@inline function regularizer(opt::NewtonOptimizer, g_norm::R) where {R}
+    return iszero(opt.M) ? zero(g_norm) : max(min(sqrt(R(opt.M)*g_norm), R(1e16)), eps(R))
+end
+
 #########################################################
 
 """
@@ -94,6 +101,13 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
     solver_ = solver(dim; kwargs...)
 
     return RSFNOptimizer(solver_, M, linesearch, η, α, atol, rtol)
+end
+
+"""
+Compute regularization parameter.
+"""
+@inline function regularizer(opt::RSFNOptimizer, g_norm::R) where {R}
+    return iszero(opt.M) ? zero(g_norm) : max(min(R(opt.M)*g_norm, R(1e16)), eps(R))
 end
 
 #########################################################

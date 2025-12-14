@@ -81,7 +81,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time) 
 
     #Compute function and gradient
     fval = fg!(grads, x)
-    g_norm = sqrt(dot(grads, grads))
+    g_norm = norm2(grads)
 
     #Estimate regularization
     if isnan(opt.M)
@@ -138,7 +138,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time) 
         fill!(opt.solver.p, zero(R))
 
         #Solve for search direction
-        step!(opt.solver, stats, H, grads, g_norm, opt.M; max_time=max_time-time)
+        step!(opt, opt.solver, stats, H, grads, g_norm; max_time=max_time-time)
 
         #Linesearch
         if !opt.linesearch!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
@@ -151,7 +151,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time) 
 
         #Update function and gradient
         fval = fg!(grads, x)
-        g_norm = sqrt(dot(grads, grads))
+        g_norm = norm2(grads)
 
         #Update stats
         push!(stats.f_seq, fval)
