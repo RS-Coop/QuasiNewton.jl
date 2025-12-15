@@ -1,6 +1,3 @@
-# Documentation
-- Docstrings, Julia->Documentation->Documentation
-
 # Imporvements/Features
 - ADHvpOperator mul! without having to convert to Vector
 - Custom Newton linesearch

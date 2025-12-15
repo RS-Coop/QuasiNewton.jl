@@ -8,6 +8,27 @@ using LineSearches: BackTracking
 
 ########################################################
 
+"""
+Perform a cubic-order backtracking line search.
+
+# Arguments
+- `opt::O`: Optimizer; `NewtonOptimizer` or `RSFNOptimizer`.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+- `x::S`: Current iterate.
+- `f::F1`: Objective function.
+- `fg!::F2`: In-place gradient function.
+- `fval::R`: Current function value at `x`.
+- `g::S`: Gradient vector at `x`.
+- `g_norm::R`: Gradient norm
+- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+
+# Updates
+- `opt.solver.p` with scaled search direction.
+- `opt.M` with updated regularization.
+
+# Returns
+- `status::Bool`: Always returns `true`.
+"""
 function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Setup
@@ -52,15 +73,25 @@ end
 ########################################################
 
 """
-In place regularization line-search
+Perform an in-place regularization-based line search.
 
-Input:
-    x :: current iterate
-    p :: search direction
-    f :: scalar valued function
-    fval :: current function value
-    λ :: regularization
-    α :: float in (0,1)
+# Arguments
+- `opt::O`: Optimizer; `NewtonOptimizer` or `RSFNOptimizer`.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+- `x::S`: Current iterate.
+- `f::F1`: Objective function.
+- `fg!::F2`: In-place gradient function.
+- `fval::R`: Current function value at `x`.
+- `g::S`: Gradient vector at `x`.
+- `g_norm::R`: Gradient norm
+- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+
+# Updates
+- `opt.solver.p` with scaled search direction.
+- `opt.M` with updated regularization.
+
+# Returns
+- `status::Bool`: Always returns `true`.
 """
 function search_M!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
@@ -92,15 +123,25 @@ end
 ########################################################
 
 """
-In place step-size line-search
+Perform an in-place step-size line search.
 
-Input:
-    x :: current iterate
-    p :: search direction
-    f :: scalar valued function
-    fval :: current function value
-    λ :: regularization
-    α :: float in (0,1)
+# Arguments
+- `opt::O`: Optimizer; `NewtonOptimizer` or `RSFNOptimizer`.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+- `x::S`: Current iterate.
+- `f::F1`: Objective function.
+- `fg!::F2`: In-place gradient function.
+- `fval::R`: Current function value at `x`.
+- `g::S`: Gradient vector at `x`.
+- `g_norm::R`: Gradient norm
+- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+
+# Updates
+- `opt.solver.p` with scaled search direction.
+- `opt.M` with updated regularization.
+
+# Returns
+- `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
 """
 function search_η!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 

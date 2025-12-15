@@ -5,9 +5,23 @@ Adaptive Regularization with Cubics (ARC).
 =#
 
 #########################################################
+#ARC Optimizer
+#########################################################
 
 """
 Adaptive Regularization with Cubics (ARC) optimizer.
+
+# Fields
+- `solver::ARCSolver`: Subproblem solver for computing search directions.
+- `M::Real`: Cubic regularization.
+- `linesearch!::Function`: Search direction update function (ARC-specific).
+- `η::Float`: Step size.
+- `η1::Float`: ARC acceptance threshold (lower bound).
+- `η2::Float`: ARC acceptance threshold (upper bound for very successful step).
+- `γ1::Float`: Factor to reduce `M` when step unsuccessful.
+- `γ2::Float`: Factor to increase `M` when step very successful.
+- `atol::Float`: Absolute gradient norm tolerance.
+- `rtol::Float`: Relative gradient norm tolerance.
 """
 mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
     solver::Q #search direction solver
@@ -23,17 +37,21 @@ mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:Abs
 end
 
 """
-Constructor
+Constructor for `ARCOptimizer`.
 
-Input:
-    dim :: dimension of parameters
-    M :: hessian lipschitz constant
-    η1::
-    η2::
-    γ1::
-    γ2::
-    atol :: absolute gradient norm tolerance
-    rtol :: relative gradient norm tolerance
+# Arguments
+- `dim::Int`: Problem dimension.
+- `M::Real`: Initial cubic regularization (default: `10.0`).
+- `η1::Float`: ARC lower acceptance threshold (default: `0.1`).
+- `η2::Float`: ARC upper acceptance threshold (default: `0.75`).
+- `γ1::Float`: Factor for reducing `M` on unsuccessful step (default: `0.1`).
+- `γ2::Float`: Factor for increasing `M` on very successful step (default: `5.0`).
+- `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
+- `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
+- `kwargs...`: Passed to `ARCSolver` constructor.
+
+# Returns
+- `ARCOptimizer` instance.
 """
 function ARCOptimizer(dim::Int; M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0.1, γ2::R2=5.0, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, R2<:AbstractFloat}
 
@@ -48,9 +66,17 @@ function ARCOptimizer(dim::Int; M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0
 end
 
 #########################################################
+#ARC Solver
+#########################################################
 
 """
-Adaptive Regularization with Cubics (ARC) solver using shifted CG Lanczos
+ARC subproblem solver using shifted CG Lanczos.
+
+# Fields
+- `workspace::KrylovWorkspace`: Workspace for Krylov subspace computation.
+- `krylov_order::Int`: Maximum Krylov subspace size.
+- `shifts::Vector`: Shift values for cubic regularization.
+- `p::Vector`: Computed search direction.
 """
 mutable struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
     workspace::W #Krylov workspace
@@ -59,6 +85,18 @@ mutable struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}}
     p::S #search direction
 end
 
+"""
+Constructor for `ARCSolver`.
+
+# Arguments
+- `dim::Int`: Dimension of parameter space.
+- `type`: Vector type (default: `Vector{Float64}`).
+- `num_shifts::Int`: Number of shifts to try (default: 61).
+- `krylov_order::Int`: Maximum Krylov iterations (default: 0).
+
+# Returns
+- `ARCSolver` instance with precomputed shifts and workspace.
+"""
 function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, num_shifts::Int=61, krylov_order::Int=0)
 
     #Shifts
@@ -70,6 +108,23 @@ function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
 end
 
+"""
+Compute a single ARC step using `ARCSolver`.
+
+# Arguments
+- `opt::NewtonOptimizer`: Optimizer.
+- `solver::NewtonSolver`: Solver instance.
+- `stats::QuasiNewtonStats`: Optimization statistics.
+- `H::HvpOperator`: Hessian operator.
+- `g::Vector`: Gradient.
+- `g_norm::Real`: Gradient norm.
+- `tol::Real`: Step tolerance (optional).
+- `max_time::Real`: Maximum allowed time (optional).
+
+# Updates
+- `solver.p` with computed search directions.
+- `stats` with iteration info.
+"""
 function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Tolerance
@@ -97,18 +152,30 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H:
     return
 end
 
-########################################################
+#########################################################
+#ARC Search
+#########################################################
 
 """
-In place ARC search direction search
+In-place ARC search direction update.
 
-Input:
-    x :: current iterate
-    p :: search direction
-    f :: scalar valued function
-    fval :: current function value
-    λ :: regularization
-    α :: float in (0,1)
+# Arguments
+- `opt::ARCOptimizer` Optimizer.
+- `stats::QuasiNewtonStats` Optimization statistics.
+- `x::Vector`: Current iterate.
+- `f::Function`: Objective function.
+- `fg!::Function`: Gradient evaluation function (required for call compatibility).
+- `fval::Real`: Current function value.
+- `g::Vector`: Gradient at current iterate.
+- `g_norm::Real`: Gradient norm.
+- `H::HvpOperator`: Hessian operator.
+
+# Updates
+- `opt.M` adaptively.
+- `stats` with iteration info.
+
+# Returns
+- `status::Bool`: True if step accepted, false otherwise.
 """
 function search_ARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     

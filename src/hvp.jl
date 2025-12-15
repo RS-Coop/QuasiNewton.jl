@@ -29,9 +29,7 @@ LinearAlgebra.ishermitian(H::HvpOperator) = true
 LinearAlgebra.issymmetric(H::HvpOperator) = true
 
 """
-In place update of HvpOperator
-
-Input:
+Resets the number of Hessian-vector products performed by the operator.
 """
 @inline function reset!(H::HvpOperator)
 	H.nprod = 0
@@ -40,7 +38,10 @@ Input:
 end
 
 """
-Form full matrix
+Form the full Hessian matrix from a Hessian-vector product operator.
+
+# Returns
+- `Hermitian{R, Matrix{R}}`: Full Hermitian matrix representation of the Hessian.
 """
 @inline function Base.Matrix(H::HvpOperator{R}) where {R}
 	n = size(H, 1)
@@ -60,12 +61,47 @@ Form full matrix
 end
 
 """
-In-place matrix-matrix multiplcation with HvpOperator
+Out-of-place matrix-vector multiplication with Hessian-vector product operator.
 
-Input:
-	result :: matvec storage
-	H :: HvpOperator
-	v :: rhs vector
+# Arguments
+- `H::HvpOperator{R}`: Hessian operator.
+- `v::AbstractVector{R}`: Right-hand side vector.
+
+# Returns
+- `y::Vector{R}`: Result of `H*v`.
+"""
+@inline function *(H::HvpOperator{R}, v::AbstractVector{R}) where {R}
+	y = similar(v)
+	mul!(y, H, v)
+	return y
+end
+
+"""
+Out-of-place matrix-matrix multiplication with Hessian-vector product operator.
+
+# Arguments
+- `H::HvpOperator{R}`: Hessian operator.
+- `V::AbstractMatrix{R}`: Right-hand side matrix.
+
+# Returns
+- `Y::Matrix{R}`: Result of `H*V`.
+"""
+@inline function *(H::HvpOperator{R}, V::AbstractMatrix{R}) where {R}
+	Y = similar(V)
+	mul!(Y, H, V)
+	return Y
+end
+
+"""
+In-place matrix-matrix multiplication with Hessian-vector product operator.
+
+# Arguments
+- `Y::AbstractMatrix{R}`: Storage for result.
+- `H::HvpOperator{R}`: Hessian operator.
+- `V::AbstractMatrix{R}`: Right-hand side matrix.
+
+# Returns
+- `Y`: Updated with `H*V`.
 """
 @inline Base.@propagate_inbounds function LinearAlgebra.mul!(Y::AbstractMatrix{R}, H::HvpOperator{R}, V::AbstractMatrix{R}) where {R}
 	@boundscheck size(Y) == size(V) || throw(DimensionMismatch())
@@ -77,38 +113,18 @@ Input:
 	return Y
 end
 
-"""
-Out of place matrix vector multiplcation with HvpOperator
-
-Input:
-	H :: HvpOperator
-	v :: rhs vector
-"""
-@inline function *(H::HvpOperator{R}, v::AbstractVector{R}) where {R}
-	y = similar(v)
-	mul!(y, H, v)
-	return y
-end
-
-"""
-Out of place matrix matrix multiplcation with HvpOperator
-
-Input:
-	H :: HvpOperator
-	v :: rhs vector
-"""
-@inline function *(H::HvpOperator{R}, V::AbstractMatrix{R}) where {R}
-	Y = similar(V)
-	mul!(Y, H, V)
-	return Y
-end
-
 #########################################################
-#LinearOperators.jl Hvp
+#LHvpOperator: LinearOperators.jl-compatible Hvp
 #########################################################
 
 """
-Hessian-vector product operator compatible with LinearOperators.jl
+Hessian-vector product operator compatible with LinearOperators.jl.
+
+# Fields
+- `f::Function`: Function that generates the Hessian operator at a given point.
+- `x::AbstractVector`: Current point.
+- `op::AbstractLinearOperator`: Linear operator representing the Hessian at `x`.
+- `nprod::Int`: Counter of Hessian-vector products applied.
 """
 mutable struct LHvpOperator{F<:Function, R, S<:AbstractVector{R}, L<:AbstractLinearOperator{R}} <: HvpOperator{R}
     const f::F
@@ -117,12 +133,16 @@ mutable struct LHvpOperator{F<:Function, R, S<:AbstractVector{R}, L<:AbstractLin
     nprod::Int
 end
 
-"""
-Constructor.
 
-Input:
-    f :: function that builds hessian operator
-	x :: input to f
+"""
+Constructor for `LHvpOperator`.
+
+# Arguments
+- `f::Function`: Function that builds the Hessian operator.
+- `x::AbstractVector`: Input point at which to evaluate the Hessian.
+
+# Returns
+- `LHvpOperator` instance.
 """
 function LHvpOperator(f::F, x::S) where {F<:Function, R, S<:AbstractVector{R}}
 	op = f(x)
@@ -130,9 +150,11 @@ function LHvpOperator(f::F, x::S) where {F<:Function, R, S<:AbstractVector{R}}
 end
 
 """
-In place update of LHvpOperator
-Input:
-	x :: new input to f
+Update the operator to a new point.
+
+# Arguments
+- `H::LHvpOperator`: Hessian operator.
+- `x::AbstractVector`: New point.
 """
 @inline function update!(H::LHvpOperator, x::S) where {S}
 	copyto!(H.x, x)
@@ -141,12 +163,15 @@ Input:
 end
 
 """
-Inplace matrix vector multiplcation with LHvpOperator.
+In-place matrix-vector multiplication with `LHvpOperator`.
 
-Input:
-	result :: matvec storage
-	H :: LHvpOperator
-	v :: rhs vector
+# Arguments
+- `y::AbstractVector`: Storage for result.
+- `H::LHvpOperator`: Hessian operator.
+- `v::AbstractVector`: Right-hand side vector.
+
+# Returns
+- `y`: Updated with `H*v`.
 """
 @inline Base.@propagate_inbounds function LinearAlgebra.mul!(y::AbstractVector{R}, H::LHvpOperator, v::AbstractVector{R}) where {R}
     H.nprod += 1
@@ -155,11 +180,19 @@ Input:
 end
 
 #########################################################
-#DifferentiationInterface.jl AD Hvp
+#ADHvpOperator: DifferentiationInterface.jl-compatible Hvp
 #########################################################
 
 """
-Hessian-vector product operator compatible with DifferentiationInterface.jl
+Hessian-vector product operator compatible with DifferentiationInterface.jl.
+
+# Fields
+- `f::Function`: Scalar-valued function.
+- `x::AbstractVector`: Current point.
+- `ad_backend`: Automatic differentiation backend.
+- `prep`: Prepared AD state for Hessian-vector products.
+- `nprod::Int`: Counter of Hessian-vector products applied.
+- `_x`, `_v`, `_y::Vector`: Internal temporary storage.
 """
 mutable struct ADHvpOperator{F<:Function, R, S<:AbstractVector{R}, P, B} <: HvpOperator{R}
     const f::F
@@ -173,11 +206,15 @@ mutable struct ADHvpOperator{F<:Function, R, S<:AbstractVector{R}, P, B} <: HvpO
 end
 
 """
-Constructor.
+Constructor for `ADHvpOperator`.
 
-Input:
-	f :: scalar valued function
-	x :: input to f
+# Arguments
+- `f::Function`: Scalar-valued function.
+- `x::AbstractVector`: Input point.
+- `ad_backend`: Automatic differentiation backend.
+
+# Returns
+- `ADHvpOperator` instance.
 """
 function ADHvpOperator(f::F, x::S, ad_backend::B) where {F<:Function, R, S<:AbstractVector{R}, B}
 	prep = prepare_hvp_same_point(f, ad_backend, x, (similar(x),))
@@ -185,10 +222,11 @@ function ADHvpOperator(f::F, x::S, ad_backend::B) where {F<:Function, R, S<:Abst
 end
 
 """
-In place update of ADHvpOperator.
+Update `ADHvpOperator` to a new input point.
 
-Input:
-	x :: new input to f
+# Arguments
+- `H::ADHvpOperator`: Hessian operator.
+- `x::AbstractVector`: New input point.
 """
 @inline function update!(H::ADHvpOperator, x::S) where {S}
     H.x .= x
@@ -198,12 +236,15 @@ Input:
 end
 
 """
-Inplace matrix vector multiplcation with ADHvpOperator.
+In-place matrix-vector multiplication with `ADHvpOperator`.
 
-Input:
-	res :: matvec storage
-	H :: ADHvpOperator
-	v :: rhs vector
+# Arguments
+- `y::AbstractVector`: Storage for result.
+- `H::ADHvpOperator`: Hessian operator.
+- `v::AbstractVector`: Right-hand side vector.
+
+# Returns
+- `y`: Updated with `H*v`.
 """
 @inline Base.@propagate_inbounds function LinearAlgebra.mul!(y::AbstractVector{R}, H::ADHvpOperator, v::AbstractVector{R}) where {R}
 	H.nprod += 1

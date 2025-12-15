@@ -22,6 +22,7 @@ module QuasiNewton
 
 	#########################################################
 	#High-level interfaces
+	#########################################################
 
 	@inline function get_optimizer(::Val{:newton}, dim::Int; kwargs...)
 		return NewtonOptimizer(dim; kwargs...)
@@ -35,12 +36,51 @@ module QuasiNewton
 		return ARCOptimizer(dim; kwargs...)
 	end
 
+	"""
+	Minimizes a scalar function `f` starting from initial guess `x` using the specified optimizer and automatic differentiation backend.
+
+	# Arguments
+	- `x::AbstractVector`: Initial guess for the solution.
+	- `f::Function`: Objective function.
+	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`).
+	- `ad_backend`: Automatic differentiation backend.
+	- `max_iter::Int=1000`: Maximum number of iterations.
+	- `max_time::T=Inf`: Maximum allowed time.
+	- `history::Bool=false`: If true, stores iteration history.
+	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor.
+
+	# Updates
+	- `x` with approximate solution.
+
+	# Returns
+	- `stats`: Optimization statistics including final solution, convergence info, and optionally history.
+	"""
 	function minimize!(x::S, f::F, ::Val{optimizer}, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F<:Function, optimizer, T}
 		opt = get_optimizer(Val(optimizer), size(x, 1); kwargs...)
 		
 		return minimize!(opt, x, f, ad_backend; max_iter=max_iter, max_time=max_time, history=history)
 	end
 
+	"""
+	Minimizes a scalar function `f` starting from initial guess `x` with provided gradient `fg!` and Hessian `H` using the specified optimizer.
+
+	# Arguments
+	- `x::AbstractVector`: Initial guess for the solution.
+	- `f::Function`: Objective function.
+	- `fg!::Function`: In-place gradient function.
+	- `H`: Hessian or Hessian-like operator.
+	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`).
+	- `max_iter::Int=1000`: Maximum number of iterations.
+	- `max_time::T=Inf`: Maximum allowed time.
+	- `history::Bool=false`: If true, stores iteration history.
+	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor.
+
+	# Updates
+	- `x` with approximate solution.
+
+	# Returns
+	- `stats`: Optimization statistics including final solution, convergence info, and optionally history.
+	"""
 	function minimize!(x::S, f::F1, fg!::F2, H::L, ::Val{optimizer}; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, L, optimizer, T}
 		opt = get_optimizer(Val(optimizer), size(x, 1); kwargs...)
 		
@@ -49,6 +89,7 @@ module QuasiNewton
 
 	#########################################################
 	#Newton
+	#########################################################
 
 	function newton!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
 		opt = NewtonOptimizer(size(x,1); kwargs...)
@@ -67,7 +108,8 @@ module QuasiNewton
 	end
 
 	#########################################################
-	#T-SFN
+	#R-SFN
+	#########################################################
 
 	function rsfn!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
 		opt = RSFNOptimizer(size(x,1); kwargs...)
@@ -87,6 +129,7 @@ module QuasiNewton
 
 	#########################################################
 	#ARC
+	#########################################################
 
 	function arc!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
 		opt = ARCOptimizer(size(x,1); kwargs...)
@@ -105,14 +148,13 @@ module QuasiNewton
 	end
 
 	#########################################################
+	#Optional package loading
+	#########################################################
 
 	using Requires
 
-	#=
-	If optional packages are loaded then export compatible functions.
-	=#
 	function __init__()
-		
+		return nothing
 	end
 
 end #module
