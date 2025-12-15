@@ -1,67 +1,63 @@
 #=
 Author: Cooper Simpson
 
-SFN step solvers.
+Regularized Saddle-Free Newton (R-SFN).
 =#
 
-abstract type QuasiNewtonSolver end
+include("lanczos.jl")
 
 #########################################################
 
 """
-Newton solver using CG Lanczos for positive definite systems or symmlq for indefinite systems.
+Regularized Saddle-Free Newton (R-SFN) optimizer.
 """
-mutable struct NewtonSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
-    workspace::W #krylov workspace
-    const posdef::Bool #positive definite
-    const krylov_order::Int #maximum Krylov subspace size
-    p::S #search direction
+mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
+    solver::Q #search direction solver
+    M::R1 #hessian regularization scaling
+    const linesearch!::F #linesearch function
+    const η::R2 #step-size
+    const α::R2 #linesearch factor
+    const atol::R2 #absolute gradient norm tolerance
+    const rtol::R2 #relative gradient norm tolerance
 end
 
-@inline function newton_solver(dim::Int, type::Type{<:AbstractVector{<:AbstractFloat}}, krylov_order::Int, ::Val{true})
-    workspace = CgLanczosShiftWorkspace(dim, dim, 1, type)
+"""
+Constructor
 
-    return NewtonSolver(workspace, true, krylov_order, type(undef, dim))
-end
-
-@inline function newton_solver(dim::Int, type::Type{<:AbstractVector{<:AbstractFloat}}, krylov_order::Int, ::Val{false})
-    workspace = SymmlqWorkspace(dim, dim, type)
+Input:
+    dim :: dimension of parameters
+    solver :: search direction solver
+    M :: hessian lipschitz constant
+    η :: step-size in (0,1)
+    linesearch :: whether to use linesearch
+    α :: linesearch factor in (0,1)
+    atol :: absolute gradient norm tolerance
+    rtol :: relative gradient norm tolerance
+"""
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
-    return NewtonSolver(workspace, false, krylov_order, type(undef, dim))
-end
+    #Hessian Lipschitz constant
+    @assert isnan(M) || 0≤M
 
-@inline function NewtonSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, krylov_order::Int=0, posdef::Bool=false)
-    return posdef ? newton_solver(dim, type, krylov_order, Val(true)) : newton_solver(dim, type, krylov_order, Val(false))
-end
-
-function step!(opt::O, solver::NewtonSolver, stats::Stats, H::Hv, g::S, g_norm::R; max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-
-    #Regularization
-    λ = regularizer(opt, g_norm)
-
-    push!(stats.λ_seq, λ)
-
-    #Tolerance
-    ζ = 0.5
-    ξ = R(0.01)
-
-    atol = max(sqrt(eps(R)), min(ξ, ξ*λ^(1+ζ)))
-    rtol = max(sqrt(eps(R)), min(ξ, ξ*λ^(ζ)))
-
-    #Solve
-    if solver.posdef
-        krylov_solve!(solver.workspace, H, -g, [λ], itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
-    else
-        krylov_solve!(solver.workspace, H, -g, λ=λ, itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
+    #Linesearch parameters
+    if isnothing(linesearch)
+        @assert 0<η && η≤1
+        linesearch = (args...) -> return true
+    elseif iszero(M)
+        linesearch = backtrack!
     end
 
-    push!(stats.r_seq, norm(statistics(solver.workspace).residuals))
+    #Solver
+    solver_ = solver(dim; kwargs...)
 
-    push!(stats.krylov_iterations, iteration_count(solver.workspace))
+    return RSFNOptimizer(solver_, M, linesearch, η, α, atol, rtol)
+end
 
-    solver.p .= solution(solver.workspace)[1]
-
-    return
+"""
+Compute regularization parameter.
+"""
+@inline function regularizer(opt::RSFNOptimizer, g_norm::R) where {R}
+    return iszero(opt.M) ? zero(g_norm) : max(min(R(opt.M)*g_norm, R(1e16)), eps(R))
 end
 
 #########################################################
@@ -88,17 +84,21 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
     return LFASolver(depth, min_depth, max_depth, levels, type(undef, dim))
 end
 
-function step!(opt::O, solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
     λ = regularizer(opt, g_norm)
 
-    push!(stats.λ_seq, λ)
+    update_λ!(stats, λ)
 
     #Hermitian Lanczos: Unitary tridiagonalization
     Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, allow_breakdown=true, reorthogonalization=false)
 
-    level == solver.levels ? push!(stats.krylov_iterations, solver.depth) : stats.krylov_iterations[end] += solver.depth
+    if level == solver.levels
+        update_k!(stats, solver.depth)
+    elseif stats.history
+        stats.k_seq[end] += solver.depth
+    end
 
     #Symmetric tridgiagonal eigendecomposition
     #NOTE: stegr might be faster but is prone to errors
@@ -152,7 +152,7 @@ function step!(opt::O, solver::LFASolver, stats::Stats, H::Hv, g::S, g_norm::R; 
     if level > 1 && r_norm ≥ tol
         step!(opt, solver, stats, H, r, r_norm; level=level-1, tol=tol, max_time=max_time)
     else
-        push!(stats.r_seq, r_norm)
+        update_r!(stats, r_norm)
     end
 
     return
@@ -176,12 +176,12 @@ function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=
     return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim))
 end
 
-function step!(opt::O, solver::BlockLFASolver, stats::Stats, H::Hv, g::S, g_norm::R; tol::R=NaN, max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
     λ = regularizer(opt, g_norm)
 
-    push!(stats.λ_seq, λ)
+    update_λ!(stats, λ)
 
     #Block Lanczos + eigendecomposition
     solver.Ω[:,1] = g
@@ -190,7 +190,7 @@ function step!(opt::O, solver::BlockLFASolver, stats::Stats, H::Hv, g::S, g_norm
 
     Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalization=true)
 
-    push!(stats.krylov_iterations, solver.depth)
+    update_k!(stats, solver.depth)
 
     E = eigen(T) #Maybe replace this with LAPACK block diagonal solve
 
@@ -224,13 +224,13 @@ function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vec
     return EigenSolver(type(undef, dim), type(undef, dim))
 end
 
-function step!(opt::O, solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R; max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Regularization
     λ = regularizer(opt, g_norm)
 
-    push!(stats.λ_seq, λ)
-
+    update_λ!(stats, λ)
+    
     #Eigendecomposition
     E = eigen!(Matrix(H))
 
@@ -238,56 +238,6 @@ function step!(opt::O, solver::EigenSolver, stats::Stats, H::Hv, g::S, g_norm::R
     mul!(cache, E.vectors', -g)
     @. cache *= pinv(sqrt(E.values^2+λ))
     mul!(solver.p, E.vectors, cache)
-
-    return
-end
-
-#########################################################
-
-"""
-Adaptive Regularization with Cubics (ARC) solver using shifted CG Lanczos
-"""
-mutable struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
-    workspace::W #Krylov workspace
-    const krylov_order::Int #maximum Krylov subspace size
-    const shifts::S #shifts
-    p::S #search direction
-end
-
-function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, num_shifts::Int=61, krylov_order::Int=0)
-
-    #Shifts
-    shifts = 10.0 .^ range(-10.0,20.0,length=num_shifts)
-
-    #Krylov workspace
-    workspace = CgLanczosShiftWorkspace(dim, dim, num_shifts, type)
-
-    return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
-end
-
-function step!(opt::O, solver::ARCSolver, stats::Stats, H::Hv, g::S, g_norm::R; max_time=Inf) where {O, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-    
-    #Tolerance
-    ζ = 0.5
-    ξ = R(0.01)
-
-    atol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(1+ζ)))
-    rtol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(ζ)))
-
-    #Solver callback, exits when at least one solution that will work has been found
-    cb = (slv) -> begin
-        for i = eachindex(solver.shifts)
-            if !slv.not_cv[i] && (norm(slv.x[i]) / solver.shifts[i] - opt.M > 0)
-                return true
-            end
-        end
-        return false
-    end
-
-    #Solve subproblem
-    krylov_solve!(solver.workspace, H, -g, solver.shifts, itmax=solver.krylov_order, timemax=max_time, check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=true)
-
-    push!(stats.krylov_iterations, iteration_count(solver.workspace))
 
     return
 end

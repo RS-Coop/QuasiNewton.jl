@@ -16,7 +16,7 @@ Input:
     max_iter :: maximum iterations
     max_time :: maximum run time
 """
-@inline function minimize!(opt::O, x::S, f::F, ad_backend; max_iter::Int=1000, max_time=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F<:Function}
+@inline function minimize!(opt::O, x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F<:Function, T}
     #Autodiff
     H = ADHvpOperator(f, x, ad_backend)
 
@@ -24,7 +24,7 @@ Input:
     fg! = (g,x) -> value_and_gradient!(f, g, prep, ad_backend, x)[1]
 
     #Iterate
-    stats = iterate!(opt, x, f, fg!, H, max_iter, max_time)
+    stats = iterate!(opt, x, f, fg!, H, max_iter, max_time, history)
 
     return stats
 end
@@ -43,12 +43,12 @@ Input:
     max_iter :: maximum iterations
     max_time :: maximum run time
 """
-@inline function minimize!(opt::O, x::S, f::F1, fg!::F2, Hf::F3; max_iter::Int=1000, max_time=Inf) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, F3<:Function}
+@inline function minimize!(opt::O, x::S, f::F1, fg!::F2, Hf::F3; max_iter::Int=1000, max_time::T=Inf, history::Bool=false) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, F3<:Function, T}
     #LinearOperator
     H = LHvpOperator(Hf, x)
 
     #iterate
-    stats = iterate!(opt, x, f, fg!, H, max_iter, max_time)
+    stats = iterate!(opt, x, f, fg!, H, max_iter, max_time, history)
 
     return stats
 end
@@ -67,12 +67,12 @@ Input:
     max_iter :: maximum iterations
     max_time :: maximum run time
 """
-function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time) where {O<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, F1<:Function, F2<:Function, Hv<:HvpOperator}
+function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::T, history::Bool) where {O<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, F1<:Function, F2<:Function, Hv<:HvpOperator, T}
     #Start time
     tic = time_ns()
     
     #Stats
-    stats = Stats(R)
+    stats = QuasiNewtonStats{R}(history)
     converged = false
     iterations = 0
     
@@ -109,8 +109,8 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time) 
     tol = opt.atol + opt.rtol*g_norm
 
     #Initial stats
-    push!(stats.f_seq, fval)
-    push!(stats.g_seq, g_norm)
+    update_f!(stats, fval)
+    update_g!(stats, g_norm)
 
     #Iterate
     while iterations ≤ max_iter
@@ -154,8 +154,8 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time) 
         g_norm = norm2(grads)
 
         #Update stats
-        push!(stats.f_seq, fval)
-        push!(stats.g_seq, g_norm)
+        update_f!(stats, fval)
+        update_g!(stats, g_norm)
 
         #Update Hvp operator
         update!(H, x)

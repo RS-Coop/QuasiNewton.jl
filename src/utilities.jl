@@ -7,30 +7,59 @@ SFN optimizer stats
 using Printf
 using Statistics: mean
 
-export Stats
+export QuasiNewtonStats
 
 #########################################################
 
-mutable struct Stats{I<:Integer, R<:Real}
+mutable struct QuasiNewtonStats{R<:Real}
+    history::Bool #sequence history
     converged::Bool #whether optimizer has converged
-    iterations::I #number of optimizer iterations
-    f_evals::I #number of function evaluations
-    g_evals::I #number of gradient evaluations
-    hvp_evals::I #number of hvp evaluations
+    iterations::Int #number of optimizer iterations
+    f_evals::Int #number of function evaluations
+    g_evals::Int #number of gradient evaluations
+    hvp_evals::Int #number of hvp evaluations
     runtime::Float64 #iteration runtime
     f_seq::Vector{R} #function value sequence
     g_seq::Vector{R} #gradient norm sequence
     r_seq::Vector{R} #residual norm sequence
     λ_seq::Vector{R} #regularization tracking
-    krylov_iterations::Vector{R} #number of Krylov iterations
+    k_seq::Vector{Int} #number of Krylov iterations
     status::String #exit status
+
+    function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
+        return new{R}(history, false,
+                        0, 0, 0, 0, 0.0,
+                        Vector{R}(undef,1), Vector{R}(undef,1), R[], R[], Int[],
+                        "Nominal")
+    end
 end
 
-function Stats(type::Type{<:Real})
-    return Stats(false, 0, 0, 0, 0, 0.0, type[], type[], type[], type[], type[], "Nominal")
+function update_f!(stats::QuasiNewtonStats, val::R) where {R}
+    stats.history ? push!(stats.f_seq, val) : stats.f_seq[1] = val
+    return nothing
 end
 
-function Base.show(io::IO, stats::Stats)
+function update_g!(stats::QuasiNewtonStats, val::R) where {R}
+    stats.history ? push!(stats.g_seq, val) : stats.g_seq[1] = val
+    return nothing
+end
+
+function update_r!(stats::QuasiNewtonStats, val::R) where {R}
+    stats.history ? push!(stats.r_seq, val) : nothing
+    return nothing
+end
+
+function update_λ!(stats::QuasiNewtonStats, val::R) where {R}
+    stats.history ? push!(stats.λ_seq, val) : nothing
+    return nothing
+end
+
+function update_k!(stats::QuasiNewtonStats, val::Int)
+    stats.history ? push!(stats.k_seq, val) : nothing
+    return nothing
+end
+
+function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "Converged:               %9s\n", stats.converged)
     @printf(io, "Iterations:              %9d\n", stats.iterations)
     @printf(io, "Runtime (s):            %9.2e\n", stats.runtime)
@@ -47,23 +76,26 @@ function Base.show(io::IO, stats::Stats)
 
     println()
     
-    @printf(io, "Residual Norm:\n")
-    @printf(io, "          Max:           %9.2e\n", maximum(stats.r_seq; init=0.))
-    @printf(io, "          Avg:           %9.2e\n", mean(stats.r_seq))
+    if !isempty(stats.r_seq)
+        @printf(io, "Residual Norm:\n")
+        @printf(io, "          Max:           %9.2e\n", maximum(stats.r_seq; init=0.))
+        @printf(io, "          Avg:           %9.2e\n", mean(stats.r_seq))
+        println()
+    end
+
+    if !isempty(stats.λ_seq)
+        @printf(io, "Regularization:\n")
+        @printf(io, "          Max:           %9.2e\n", maximum(stats.λ_seq; init=0.))
+        @printf(io, "          Avg:           %9.2e\n", mean(stats.λ_seq))
+        println()
+    end
     
-    println()
-
-    @printf(io, "Regularization:\n")
-    @printf(io, "          Max:           %9.2e\n", maximum(stats.λ_seq; init=0.))
-    @printf(io, "          Avg:           %9.2e\n", mean(stats.λ_seq))
-
-    println()
-    
-    @printf(io, "Krylov Iterations:\n")
-    @printf(io, "          Max:           %9.2e\n", maximum(stats.krylov_iterations; init=0))
-    @printf(io, "          Avg:           %9.2e\n", mean(stats.krylov_iterations))
-
-    println()
+    if !isempty(stats.k_seq)
+        @printf(io, "Krylov Iterations:\n")
+        @printf(io, "          Max:           %9.2e\n", maximum(stats.k_seq; init=0))
+        @printf(io, "          Avg:           %9.2e\n", mean(stats.k_seq))
+        println()
+    end
 
     @printf(io, "Status:                  %s\n", stats.status)
 end

@@ -72,10 +72,10 @@ First, we consider the following example of minimizing a simple least-squares pr
 using LinearAlgebra #for norm
 using LinearOperators #for Hessian
 
-d = 100 #problem dimension
+m = 100; n = 50 #problem size
 
-A = randn(d,d) #random data
-b = A*randn(d) #random rhs
+A = randn(m,n) #random data
+b = A*randn(n) #random rhs
 
 f(x) = 0.5*norm(A*x-b)^2 #objective function
 function fg!(g, x) #computes gradient in-place and returns objective function
@@ -84,25 +84,26 @@ function fg!(g, x) #computes gradient in-place and returns objective function
 end
 H(x) = LinearOperator(A'*A) #computes Hessian
 
-stats = minimize!(randn(d), f, fg!, H, Val(:newton);
+stats = minimize!(randn(n), f, fg!, H, Val(:newton);
 					max_iter=100,
 					max_time=60,
 					posdef=true,
-					M=0.0)
+					M=0.0,
+					history=true)
 
 show(stats)
 #=
 Converged:                    true
 Iterations:                      1
-Runtime (s):             1.96e-04
-Minimum:                  8.22e-13
-Gradient Norm:            1.38e-05
+Runtime (s):             6.72e-02
+Minimum:                  1.56e-12
+Gradient Norm:            1.52e-05
 
 Evaluations:
-      Total:                   159
+      Total:                    36
    Function:                     3
    Gradient:                     2
-    Hessian:                   154
+    Hessian:                    31
 
 Residual Norm:
           Max:            0.00e+00
@@ -113,8 +114,8 @@ Regularization:
           Avg:            0.00e+00
 
 Krylov Iterations:
-          Max:            1.54e+02
-          Avg:            1.54e+02
+          Max:            3.10e+01
+          Avg:            3.10e+01
 
 Status:                  Nominal
 =#
@@ -137,7 +138,8 @@ end
 stats = minimize!(zeros(10), rosenbrock, Val(:rsfn), AutoEnzyme();
 					max_iter=100,
 					max_time=60,
-					M=1e-8)
+					M=1e-8,
+					history=true)
 
 show(stats)
 #=

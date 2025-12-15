@@ -1,14 +1,14 @@
 #=
 Author: Cooper Simpson
 
-Line-search procedures.
+Shared line-search procedures.
 =#
 
 using LineSearches: BackTracking
 
 ########################################################
 
-function backtrack!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     #Setup
     p = opt.solver.p
@@ -52,7 +52,7 @@ end
 ########################################################
 
 """
-In place SFN regularization line-search
+In place regularization line-search
 
 Input:
     x :: current iterate
@@ -62,7 +62,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 """
-function search_M!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function search_M!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
@@ -92,7 +92,7 @@ end
 ########################################################
 
 """
-In place SFN step-size line-search
+In place step-size line-search
 
 Input:
     x :: current iterate
@@ -102,7 +102,7 @@ Input:
     λ :: regularization
     α :: float in (0,1)
 """
-function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function search_η!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     #Setup
     p = opt.solver.p
@@ -149,83 +149,4 @@ function search_η!(opt::O, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g
 
     #Fallback to basic backtracking if linesearch failed
     return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, H)
-end
-
-########################################################
-
-"""
-In place ARC search direction search
-
-Input:
-    x :: current iterate
-    p :: search direction
-    f :: scalar valued function
-    fval :: current function value
-    λ :: regularization
-    α :: float in (0,1)
-"""
-function search_ARC!(opt::ARCOptimizer, stats::Stats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-    
-    #Cubic sub-problem
-    res = similar(g)
-    @inline cubic_subprob = (d) -> begin
-        mul!(res, H, d)
-        return fval + dot(g,d) + 0.5*dot(d, res)
-    end
-
-    status = false
-    shift_failure = false
-    M_new = opt.M
-    
-    i = findfirst(opt.solver.workspace.converged)
-
-    if i === nothing
-        return status
-    end
-
-    X = solution(opt.solver.workspace)
-
-    j = argmin(abs.(opt.M*opt.solver.shifts[i:end]-norm.(X[i:end]))) + i-1
-
-    while !status && !shift_failure
-        stats.f_evals += 1
-
-        ρ = (fval - f(x + X[j]))/(fval - cubic_subprob(X[j]))
-
-        #unsuccessful
-        if ρ < opt.η1
-            M_new = opt.M
-
-            while M_new > opt.γ1*opt.M
-                if j == length(opt.solver.shifts)
-                    stats.status = "No next shift"
-                    shift_failure = true
-                    break
-                end
-                M_new = norm2(X[j+1])/opt.solver.shifts[j+1]
-                j += 1
-            end
-            
-        #successful
-        else
-            status = true
-
-            push!(stats.r_seq, opt.solver.workspace.rNorms[j])
-            push!(stats.λ_seq, opt.solver.shifts[j])
-
-            #step
-            opt.solver.p .= X[j]
-
-            #very successful
-            if ρ > opt.η2
-                M_new = opt.γ2*opt.M
-            else
-                M_new = opt.M
-            end
-        end
-    end
-
-    opt.M = min(M_new, R(1e16))
-
-    return status
 end
