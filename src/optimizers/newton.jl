@@ -16,7 +16,7 @@ Author: Cooper Simpson
 - `M::Real`: Hessian regularization scaling.
 - `linesearch!::Function`: Linesearch function.
 - `η::AbstractFloat`: Step size.
-- `α::AbstractFloat`: Linesearch factor.
+- `α::AbstractFloat`: Linesearch reduction factor.
 - `atol::AbstractFloat`: Absolute gradient tolerance.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
@@ -25,7 +25,7 @@ mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:
     M::R1 #hessian regularization scaling
     const linesearch!::F #linesearch function
     const η::R2 #step-size
-    const α::R2 #linesearch factor
+    const α::R2 #linesearch reduction factor
     const atol::R2 #absolute gradient norm tolerance
     const rtol::R2 #relative gradient norm tolerance
 end
@@ -39,7 +39,7 @@ Constructor for `NewtonOptimizer`.
 - `M::Real`: Hessian regularization scaling (default: `0.0`).
 - `linesearch::Function`: Linesearch function (default: `backtrack!`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
-- `α::Float`: Linesearch factor in (0,1) (default: `0.5`).
+- `α::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
 - `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
 - `kwargs`: Keyword arguments passed to solver constructor.

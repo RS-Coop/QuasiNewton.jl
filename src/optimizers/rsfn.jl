@@ -19,7 +19,7 @@ Regularized Saddle-Free Newton (R-SFN) optimizer.
 - `M::Real`: Hessian regularization scaling.
 - `linesearch!::Function`: Linesearch function.
 - `η::AbstractFloat`: Step size.
-- `α::AbstractFloat`: Linesearch factor.
+- `α::AbstractFloat`: Linesearch reduction factor.
 - `atol::AbstractFloat`: Absolute gradient tolerance.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
@@ -28,7 +28,7 @@ mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:Ab
     M::R1 #hessian regularization scaling
     const linesearch!::F #linesearch function
     const η::R2 #step-size
-    const α::R2 #linesearch factor
+    const α::R2 #linesearch reduction factor
     const atol::R2 #absolute gradient norm tolerance
     const rtol::R2 #relative gradient norm tolerance
 end
@@ -43,7 +43,7 @@ Constructor for `RSFNOptimizer`.
 - `M::Real`: Hessian Lipschitz constant (default: `NaN` for auto-estimation).
 - `linesearch::Function`: Optional linesearch function (default: `search_η!`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
-- `α::Float`: Linesearch factor in (0,1) (default: `0.5`).
+- `α::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
 - `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
 - `kwargs`: Keyword arguments passed to solver constructor.
