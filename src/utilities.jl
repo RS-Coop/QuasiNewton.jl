@@ -29,7 +29,7 @@ mutable struct QuasiNewtonStats{R<:Real}
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
         return new{R}(history, false,
                         0, 0, 0, 0, 0.0,
-                        Vector{R}(undef,1), Vector{R}(undef,1), R[], R[], Int[],
+                        Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)), R[], R[], Int[],
                         "Nominal")
     end
 end
