@@ -5,9 +5,9 @@ QuasiNewton optimization package.
 =#
 module QuasiNewton
 
-	#=
-	Setup
-	=#
+	#########################################################
+	#Setup
+	#########################################################
 	using LinearAlgebra
 	using LinearOperators
 	using DifferentiationInterface: prepare_gradient, prepare_hvp_same_point, value_and_gradient!, hvp!
@@ -157,4 +157,4 @@ module QuasiNewton
 		return nothing
 	end
 
-end #module
+end
