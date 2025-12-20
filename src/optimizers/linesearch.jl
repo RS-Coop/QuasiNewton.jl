@@ -6,7 +6,9 @@ Shared line-search procedures.
 
 using LineSearches: BackTracking
 
-########################################################
+#########################################################
+# Backtracking linesearch
+#########################################################
 
 """
 Perform a cubic-order backtracking line search.
@@ -70,7 +72,9 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval:
     return status
 end
 
-########################################################
+#########################################################
+# Regularization Linesearch
+#########################################################
 
 """
 Perform an in-place regularization-based line search.
@@ -120,7 +124,9 @@ function search_M!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::
     return status
 end
 
-########################################################
+#########################################################
+# Step-size linesearch
+#########################################################
 
 """
 Perform an in-place step-size line search.

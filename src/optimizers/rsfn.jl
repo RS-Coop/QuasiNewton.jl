@@ -7,7 +7,7 @@ Regularized Saddle-Free Newton (R-SFN).
 include("lanczos.jl")
 
 #########################################################
-#R-SFN Optimizer
+# R-SFN Optimizer
 #########################################################
 
 
@@ -85,7 +85,7 @@ Compute regularization parameter for R-SFN.
 end
 
 #########################################################
-#LFASolver: Lanczos function approximation
+# LFASolver: Lanczos function approximation
 #########################################################
 
 """
@@ -225,7 +225,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
 end
 
 #########################################################
-#BlockLFASolver: Block Lanczos solver
+# BlockLFASolver: Block Lanczos solver
 #########################################################
 
 """
@@ -318,7 +318,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
 end
 
 #########################################################
-#EigenSolver: Full eigendecomposition solver
+# EigenSolver: Full eigendecomposition solver
 #########################################################
 
 """

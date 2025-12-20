@@ -5,7 +5,7 @@ Author: Cooper Simpson
 =#
 
 #########################################################
-#Newton Optimizer
+# Newton Optimizer
 #########################################################
 
 """
@@ -79,7 +79,7 @@ Compute regularization parameter for Newton optimizer.
 end
 
 #########################################################
-#Newton Solver
+# Newton Solver
 #########################################################
 
 """

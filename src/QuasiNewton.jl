@@ -6,7 +6,7 @@ QuasiNewton optimization package.
 module QuasiNewton
 
 	#########################################################
-	#Setup
+	# Setup
 	#########################################################
 	using LinearAlgebra
 	using LinearOperators
@@ -21,7 +21,7 @@ module QuasiNewton
 	include("minimize.jl")
 
 	#########################################################
-	#High-level interfaces
+	# High-level interfaces
 	#########################################################
 
 	@inline function get_optimizer(::Val{:newton}, dim::Int; kwargs...)
@@ -88,7 +88,7 @@ module QuasiNewton
 	end
 
 	#########################################################
-	#Newton
+	# Newton
 	#########################################################
 
 	function newton!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
@@ -108,7 +108,7 @@ module QuasiNewton
 	end
 
 	#########################################################
-	#R-SFN
+	# R-SFN
 	#########################################################
 
 	function rsfn!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
@@ -128,7 +128,7 @@ module QuasiNewton
 	end
 
 	#########################################################
-	#ARC
+	# ARC
 	#########################################################
 
 	function arc!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
@@ -148,7 +148,7 @@ module QuasiNewton
 	end
 
 	#########################################################
-	#Optional package loading
+	# Optional package loading
 	#########################################################
 
 	using Requires

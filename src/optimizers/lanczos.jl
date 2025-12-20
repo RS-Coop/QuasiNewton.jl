@@ -3,6 +3,8 @@ Author: Cooper Simpson
 =#
 
 #########################################################
+# Scalar Lanczos
+#########################################################
 
 """
 Scalar Lanczos process.
@@ -77,6 +79,10 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 
 	return Q, SymTridiagonal(d, dl[1:end-1]), dl[end]
 end
+
+#########################################################
+# Block Lanczos
+#########################################################
 
 """
 Block Lanczos process.

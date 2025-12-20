@@ -10,7 +10,7 @@ import Base: *
 export LHvpOperator, ADHvpOperator
 
 #########################################################
-#Abstract operator
+# Abstract operator
 #########################################################
 
 abstract type HvpOperator{R} <: AbstractMatrix{R} end
@@ -114,7 +114,7 @@ In-place matrix-matrix multiplication with Hessian-vector product operator.
 end
 
 #########################################################
-#LHvpOperator: LinearOperators.jl-compatible Hvp
+# LHvpOperator: LinearOperators.jl-compatible Hvp
 #########################################################
 
 """
@@ -180,7 +180,7 @@ In-place matrix-vector multiplication with `LHvpOperator`.
 end
 
 #########################################################
-#ADHvpOperator: DifferentiationInterface.jl-compatible Hvp
+# ADHvpOperator: DifferentiationInterface.jl-compatible Hvp
 #########################################################
 
 """
