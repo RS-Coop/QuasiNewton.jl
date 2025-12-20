@@ -4,6 +4,8 @@ Author: Cooper Simpson
 SFN optimizer.
 =#
 
+export minimize!
+
 #########################################################
 # Minimization interfaces
 #########################################################

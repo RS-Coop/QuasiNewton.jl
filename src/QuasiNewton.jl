@@ -8,12 +8,13 @@ module QuasiNewton
 	#########################################################
 	# Setup
 	#########################################################
+
 	using LinearAlgebra
 	using LinearOperators
 	using DifferentiationInterface: prepare_gradient, prepare_hvp_same_point, value_and_gradient!, hvp!
 	using Krylov: KrylovWorkspace, CgLanczosShiftWorkspace, SymmlqWorkspace, krylov_solve!, iteration_count, issolved, solution, statistics
 
-	export minimize!, rsfn!, arc!, newton!
+	export rsfn!, arc!, newton!
 
 	include("utilities.jl")
 	include("hvp.jl")
