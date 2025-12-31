@@ -63,11 +63,12 @@ function update_k!(stats::QuasiNewtonStats, val::Int)
 end
 
 function Base.show(io::IO, stats::QuasiNewtonStats)
+    @printf(io, "##################################\n")
     @printf(io, "Converged:               %9s\n", stats.converged)
     @printf(io, "Iterations:              %9d\n", stats.iterations)
-    @printf(io, "Runtime (s):            %9.2e\n", stats.runtime)
-    @printf(io, "Minimum:                 %9.2e\n", length(stats.f_seq) != 0 ? stats.f_seq[end] : NaN)
-    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? stats.g_seq[end] : NaN)
+    @printf(io, "Runtime (s):             %9.2e\n", stats.runtime)
+    @printf(io, "Minimum:                 %9.2e\n", length(stats.f_seq) != 0 ? stats.f_seq[end] : missing)
+    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? stats.g_seq[end] : missing)
     
     println()
 
@@ -79,28 +80,39 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
 
     println()
     
-    if !isempty(stats.r_seq)
-        @printf(io, "Residual Norm:\n")
-        @printf(io, "          Max:           %9.2e\n", maximum(stats.r_seq; init=0.))
-        @printf(io, "          Avg:           %9.2e\n", mean(stats.r_seq))
-        println()
-    end
+    @printf(io, "Residual Norm:\n")
+    printstat(io, "          Max:", maximum_or_missing(stats.r_seq))
+    printstat(io, "          Avg:", mean_or_missing(stats.r_seq))
+    println()
 
-    if !isempty(stats.λ_seq)
-        @printf(io, "Regularization:\n")
-        @printf(io, "          Max:           %9.2e\n", maximum(stats.λ_seq; init=0.))
-        @printf(io, "          Avg:           %9.2e\n", mean(stats.λ_seq))
-        println()
-    end
-    
-    if !isempty(stats.k_seq)
-        @printf(io, "Krylov Iterations:\n")
-        @printf(io, "          Max:           %9.2e\n", maximum(stats.k_seq; init=0))
-        @printf(io, "          Avg:           %9.2e\n", mean(stats.k_seq))
-        println()
-    end
+    @printf(io, "Regularization:\n")
+    printstat(io, "           Max:", maximum_or_missing(stats.λ_seq))
+    printstat(io, "           Avg:", mean_or_missing(stats.λ_seq))
+    println()
 
-    @printf(io, "Status:                  %s\n", stats.status)
+    @printf(io, "Krylov Iterations:\n")
+    printstat(io, "              Max:", maximum_or_missing(stats.k_seq))
+    printstat(io, "              Avg:", mean_or_missing(stats.k_seq))
+    println()
+
+    @printf(io, "Status: %26s\n", stats.status)
+    @printf(io, "##################################\n")
+end
+
+#########################################################
+
+const LABEL_WIDTH = 18
+const VALUE_WIDTH = 16
+
+maximum_or_missing(itr) = isempty(itr) ? missing : mean(itr)
+mean_or_missing(itr) = isempty(itr) ? missing : mean(itr)
+
+function printstat(io, label, x)
+    if ismissing(x)
+        @printf(io, "%-*s%*s\n", LABEL_WIDTH, label, VALUE_WIDTH, "missing")
+    else
+        @printf(io, "%-*s%*.2e\n", LABEL_WIDTH, label, VALUE_WIDTH, x)
+    end
 end
 
 #########################################################

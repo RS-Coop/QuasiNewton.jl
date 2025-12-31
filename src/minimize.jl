@@ -165,7 +165,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
             stats.status = "Time limit exceeded"
             break
         elseif iterations == max_iter
-            stats.status = "Maximum iterations exceeded"
+            stats.status = "Max iterations exceeded"
             break
         end
 
