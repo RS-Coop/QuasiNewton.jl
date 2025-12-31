@@ -121,7 +121,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=Int(ceil(log2(dim))), adapt::Bool=true, min_depth::Int=2, max_depth::Int=1000, levels::Int=1)
+function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=2, max_depth::Int=1000, levels::Int=1)
 
     if adapt
         min_depth, max_depth = min_depth, min(dim, max_depth)
@@ -256,7 +256,7 @@ Constructor for `BlockLFASolver`.
 # Returns
 - `BlockLFASolver` instance.
 """
-function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=Int(floor(log2(dim))), block_size::Int=2)
+function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=floor(Int, log2(dim)), block_size::Int=2)
     if block_size > dim
         block_size = min(dim÷depth, block_size)
     end

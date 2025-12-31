@@ -104,7 +104,7 @@ end
 const LABEL_WIDTH = 18
 const VALUE_WIDTH = 16
 
-maximum_or_missing(itr) = isempty(itr) ? missing : mean(itr)
+maximum_or_missing(itr) = isempty(itr) ? missing : maximum(itr)
 mean_or_missing(itr) = isempty(itr) ? missing : mean(itr)
 
 function printstat(io, label, x)
