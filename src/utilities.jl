@@ -21,15 +21,18 @@ mutable struct QuasiNewtonStats{R<:Real}
     runtime::Float64 #iteration runtime
     f_seq::Vector{R} #function value sequence
     g_seq::Vector{R} #gradient norm sequence
-    r_seq::Vector{R} #residual norm sequence
-    λ_seq::Vector{R} #regularization tracking
-    k_seq::Vector{Int} #number of Krylov iterations
+    r_seq::Vector{Union{R,Missing}} #residual norm sequence
+    λ_seq::Vector{Union{R,Missing}} #regularization tracking
+    k_seq::Vector{Union{Int,Missing}} #number of Krylov iterations
     status::String #exit status
 
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
         return new{R}(history, false,
                         0, 0, 0, 0, 0.0,
-                        Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)), R[], R[], Int[],
+                        Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)), 
+                        history ? R[] : Union{R,Missing}[missing],
+                        history ? R[] : Union{R,Missing}[missing],
+                        history ? Int[] : Union{Int,Missing}[missing],
                         "Nominal")
     end
 end
