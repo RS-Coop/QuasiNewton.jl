@@ -122,24 +122,22 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
     #Estimate regularization
     if isnan(opt.M)
-        ζ = randn(length(x))
-        D = norm(ζ)^2
+        h = sqrt(eps(R)) * max(one(R), norm(x))
 
-        g2 = similar(grads)
-        fg!(g2, x+ζ)
+        ζ = randn(R, length(x))
+        normalize!(ζ)
 
+        g2 = similar(ζ)
+        fg!(g2, @. x + h*ζ)
         stats.g_evals += 1
 
-        if any(isnan, g2)
-            opt.M = R(1e-8)
-        else
-            mul!(ζ, H, ζ) 
-            ζ .= g2-grads-ζ
+        mul!(ζ, H, ζ)
 
-            opt.M = min(R(1e8), 2*norm(ζ)/(D))
-        end
+        @. g2 = g2 - grads - h*ζ
 
-        g2 = nothing #mark for collection
+        opt.M = min(R(1e8), norm(g2)/h^2)
+
+        # println("M Estimate: ", opt.M)
     end
 
     #Tolerance
