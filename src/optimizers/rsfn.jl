@@ -24,15 +24,14 @@ Regularized Saddle-Free Newton (R-SFN) optimizer.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
 mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F<:Function} <: QuasiNewtonOptimizer
-    solver::Q #search direction solver
-    M::R #hessian regularization scaling
-    const linesearch!::F #linesearch function
-    const η::R #step-size
-    const α::R #linesearch reduction factor
-    const atol::R #absolute gradient norm tolerance
-    const rtol::R #relative gradient norm tolerance
+    solver::Q # search direction solver
+    M::R # hessian regularization scaling
+    const linesearch!::F # linesearch function
+    const η::R # step-size
+    const α::R # linesearch reduction factor
+    const atol::R # absolute gradient norm tolerance
+    const rtol::R # relative gradient norm tolerance
 end
-
 
 """
 Constructor for `RSFNOptimizer`.
@@ -53,10 +52,10 @@ Constructor for `RSFNOptimizer`.
 """
 function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
-    #Hessian Lipschitz constant
+    # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
 
-    #Linesearch parameters
+    # Linesearch parameters
     if isnothing(linesearch)
         @assert 0<η && η≤1
         linesearch = (args...) -> return true
@@ -64,10 +63,61 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
         linesearch = backtrack!
     end
 
-    #Solver
+    # Solver
     solver_ = solver(dim; kwargs...)
 
     return RSFNOptimizer(solver_, R2(M), linesearch, η, α, atol, rtol)
+end
+
+"""
+Perform setup operations before beginning optimization process.
+
+# Arguments
+- `opt::RSFNOptimizer`: Optimizer
+- `stats::QuasiNewtonStats`: Optimization Statistics
+- `x::S`: Current iterate.
+- `f::F1`: Objective function.
+- `fg!::F2`: In-place gradient function.
+- `fval::R`: Current function value at `x`.
+- `g::S`: Gradient vector at `x`.
+- `g_norm::R`: Gradient norm
+- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+
+# Updates
+- `opt`
+
+# Returns
+- `nothing`
+"""
+@inline function setup!(opt::RSFNOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+    Mvals = [1e-8, 1., opt.M]
+
+    dec_max = -Inf
+    index_max = 0
+
+    original_depth = opt.solver.depth
+
+    for (i, M) in enumerate(Mvals)
+        opt.M = M
+        fill!(opt.solver.p, zero(R))
+        step!(opt, opt.solver, stats, H, g, g_norm)
+        opt.linesearch!(opt, stats, x, fval, g, g_norm, f, fg!, H)
+
+        dec = fval - f(x+opt.η*opt.solver.p)
+
+        if dec > dec_max
+            dec_max = dec
+            index_max = i
+        end
+    end
+
+    opt.M = Mvals[index_max]
+
+    opt.solver.depth = original_depth
+
+    println("M Search: ", opt.M)
+
+    return nothing
 end
 
 """
@@ -99,11 +149,11 @@ Lanczos-based R-SFN search direction solver.
 - `p::Vector`: Search direction.
 """
 mutable struct LFASolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
-    depth::Int #krylov depth
-    const min_depth::Int #minimum krylov depth
-    const max_depth::Int #maximum krylov depth
-    const levels::Int #recursion levels
-    p::S #search direction
+    depth::Int # krylov depth
+    const min_depth::Int # minimum krylov depth
+    const max_depth::Int # maximum krylov depth
+    const levels::Int # recursion levels
+    p::S # search direction
 end
 
 """
@@ -152,12 +202,12 @@ Compute a single R-SFN step using `LFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
-    #Regularization
+    # Regularization
     λ = regularizer(opt, g_norm)
 
     update_λ!(stats, λ)
 
-    #Hermitian Lanczos: Unitary tridiagonalization
+    # Hermitian Lanczos: Unitary tridiagonalization
     Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, allow_breakdown=true, reorthogonalization=true)
 
     if level == solver.levels
@@ -166,17 +216,17 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
         stats.k_seq[end] += solver.depth
     end
 
-    #Symmetric tridgiagonal eigendecomposition
-    #NOTE: stegr might be faster but is prone to errors
+    # Symmetric tridgiagonal eigendecomposition
+    # NOTE: stegr might be faster but is prone to errors
     # E = eigen(T)
     # E = Eigen(LAPACK.stegr!('V', T.dv, T.ev)...)
     E = Eigen(LAPACK.stev!('V', T.dv, T.ev)...)
 
-    #Temporary memory, NOTE: Can you get away with just one of these?
+    # Temporary memory, NOTE: Can you get away with just one of these?
     cache1 = similar(g, solver.depth)
     cache2 = similar(g, solver.depth)
 
-    #Update search direction
+    # Update search direction
     @. E.values = pinv(sqrt(E.values^2+λ))
     s = pinv(sqrt(λ))
 
@@ -186,15 +236,15 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     @views mul!(solver.p, Q[:,1:solver.depth], cache2, -g_norm, 1.)
     solver.p .-= s*g
 
-    #Compute residual
+    # Compute residual
     @views @. cache1 = E.values*E.vectors[1,:]
     z = dot(E.vectors[solver.depth,:], cache1)
 
-    r_norm = g_norm*βₖ₊₁*z #NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
+    r_norm = g_norm*βₖ₊₁*z # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
     @views r = r_norm*Q[:,solver.depth+1]
     r_norm = abs(r_norm)
 
-    #Tolerance
+    # Tolerance
     if isnan(tol)
         ζ = 0.5
         ξ = R(0.01)
@@ -205,7 +255,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
         tol = atol + g_norm*rtol
     end
     
-    #Rank change
+    # Rank change
     if solver.min_depth != solver.max_depth
         if r_norm ≥ tol && level == 1
             solver.depth = min(solver.max_depth, solver.depth*2)
@@ -214,7 +264,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
         end
     end
 
-    #Recurse
+    # Recurse
     if level > 1 && r_norm ≥ tol
         step!(opt, solver, stats, H, r, r_norm; level=level-1, tol=tol, max_time=max_time)
     else
@@ -238,10 +288,10 @@ Block Lanczos R-SFN search direction solver.
 - `p::Vector`: Search direction.
 """
 mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}  <: QuasiNewtonSolver
-    depth::Int #krylov depth
-    block_size::Int #krylov block size
-    Ω::M #block RHS
-    p::S #search direction
+    depth::Int # krylov depth
+    block_size::Int # krylov block size
+    Ω::M # block RHS
+    p::S # search direction
 end
 
 """
@@ -283,25 +333,25 @@ Compute a single R-SFN step using `BlockLFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
-    #Regularization
+    # Regularization
     λ = regularizer(opt, g_norm)
 
     update_λ!(stats, λ)
 
-    #Block Lanczos + eigendecomposition
+    # Block Lanczos + eigendecomposition
     solver.Ω[:,1] = g
 
-    block_depth = solver.block_size*solver.depth #total size i.e. "rank"
+    block_depth = solver.block_size*solver.depth # total size i.e. "rank"
 
     Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalization=true)
 
     update_k!(stats, solver.depth)
 
-    E = eigen(T) #Maybe replace this with LAPACK block diagonal solve
+    E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
 
     # println(E.values)
 
-    #Update search direction
+    # Update search direction
     cache1 = similar(g, block_depth)
     cache2 = similar(g, block_depth)
 
@@ -329,8 +379,8 @@ Full eigendecomposition R-SFN search direction solver.
 - `cache::Vector`: Temporary memory.
 """
 mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
-    p::S #search direction
-    cache::S #temporary memory
+    p::S # search direction
+    cache::S # temporary memory
 end
 
 """
@@ -366,15 +416,15 @@ Compute a single R-SFN step using `EigenLFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
-    #Regularization
+    # Regularization
     λ = regularizer(opt, g_norm)
 
     update_λ!(stats, λ)
     
-    #Eigendecomposition
+    # Eigendecomposition
     E = eigen!(Matrix(H))
 
-    #Update search direction
+    # Update search direction
     mul!(cache, E.vectors', -g)
     @. cache *= pinv(sqrt(E.values^2+λ))
     mul!(solver.p, E.vectors, cache)

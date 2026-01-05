@@ -29,13 +29,13 @@ Minimizes a scalar function `f` using optimizer `O` with automatic differentiati
 - `stats`: A `QuasiNewtonStats` object containing convergence information, final solution, and optional history.
 """
 @inline function minimize!(opt::O, x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F<:Function, T}
-    #Autodiff
+    # Autodiff
     H = ADHvpOperator(f, x, ad_backend)
 
     prep = prepare_gradient(f, ad_backend, x)
     fg! = (g,x) -> value_and_gradient!(f, g, prep, ad_backend, x)[1]
 
-    #Iterate
+    # Iterate
     stats = iterate!(opt, x, f, fg!, H, max_iter, max_time, history)
 
     return stats
@@ -61,10 +61,10 @@ Minimizes a scalar function `f` using optimizer `O`.
 - `stats`: A `QuasiNewtonStats` object containing convergence information, final solution, and optional history.
 """
 @inline function minimize!(opt::O, x::S, f::F1, fg!::F2, Hf::F3; max_iter::Int=1000, max_time::T=Inf, history::Bool=false) where {O<:QuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, F3<:Function, T}
-    #LinearOperator
+    # LinearOperator
     H = LHvpOperator(Hf, x)
 
-    #iterate
+    # iterate
     stats = iterate!(opt, x, f, fg!, H, max_iter, max_time, history)
 
     return stats
@@ -105,22 +105,22 @@ Performs the core iteration loop to minimize a scalar function `f`.
   - `status::String`: Exit status.
 """
 function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::T, history::Bool) where {O<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, F1<:Function, F2<:Function, Hv<:HvpOperator, T}
-    #Start time
+    # Start time
     tic = time_ns()
     
-    #Stats
+    # Stats
     stats = QuasiNewtonStats{R}(history)
     converged = false
     iterations = 0
     
-    #Gradient allocation
-    grads = similar(x)
+    # Gradient allocation
+    g = similar(x)
 
-    #Compute function and gradient
-    fval = fg!(grads, x)
-    g_norm = norm2(grads)
+    # Compute function and gradient
+    fval = fg!(g, x)
+    g_norm = norm2(g)
 
-    #Estimate regularization
+    # Estimate regularization
     if isnan(opt.M)
         h = sqrt(eps(R)) * max(one(R), norm(x))
 
@@ -133,30 +133,33 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
         mul!(ζ, H, ζ)
 
-        @. g2 = g2 - grads - h*ζ
+        @. g2 = g2 - g - h*ζ
 
         opt.M = clamp(norm(g2)/h^2, R(1e-8), R(1e8))
 
         # println("M Estimate: ", opt.M)
     end
 
-    #Tolerance
+    # Tolerance
     tol = opt.atol + opt.rtol*g_norm
 
-    #Initial stats
+    # Initial stats
     update_f!(stats, fval)
     update_g!(stats, g_norm)
 
-    #Iterate
+    # Run setup
+    setup!(opt, stats, x, fval, g, g_norm, f, fg!, H)
+
+    # Iterate
     while iterations ≤ max_iter
 
-        #Check gradient norm
+        # Check gradient norm
         if g_norm <= tol
             converged = true
             break
         end
 
-        #Check other exit conditions
+        # Check other exit conditions
         time = elapsed(tic)
 
         if time >= max_time
@@ -167,16 +170,16 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
             break
         end
 
-        #Step
+        # Step
         ##########
-        #Reset search direction
+        # Reset search direction
         fill!(opt.solver.p, zero(R))
 
-        #Solve for search direction
-        step!(opt, opt.solver, stats, H, grads, g_norm; max_time=max_time-time)
+        # Solve for search direction
+        step!(opt, opt.solver, stats, H, g, g_norm; max_time=max_time-time)
 
-        #Linesearch
-        if !opt.linesearch!(opt, stats, x, f, fg!, fval, grads, g_norm, H)
+        # Linesearch
+        if !opt.linesearch!(opt, stats, x, fval, g, g_norm, f, fg!, H)
             stats.status = "Linesearch failure"
             break
         else
@@ -184,22 +187,22 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
         end
         ##########
 
-        #Update function and gradient
-        fval = fg!(grads, x)
-        g_norm = norm2(grads)
+        # Update function and gradient
+        fval = fg!(g, x)
+        g_norm = norm2(g)
 
-        #Update stats
+        # Update stats
         update_f!(stats, fval)
         update_g!(stats, g_norm)
 
-        #Update Hvp operator
+        # Update Hvp operator
         update!(H, x)
 
-        #Increment
+        # Increment
         iterations += 1
     end
 
-    #Update stats
+    # Update stats
     stats.converged = converged
     stats.iterations = iterations
     stats.f_evals += iterations + 1

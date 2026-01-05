@@ -21,13 +21,13 @@ Author: Cooper Simpson
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
 mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F<:Function} <: QuasiNewtonOptimizer
-    solver::Q #search direction solver
-    M::R #hessian regularization scaling
-    const linesearch!::F #linesearch function
-    const η::R #step-size
-    const α::R #linesearch reduction factor
-    const atol::R #absolute gradient norm tolerance
-    const rtol::R #relative gradient norm tolerance
+    solver::Q # search direction solver
+    M::R # hessian regularization scaling
+    const linesearch!::F # linesearch function
+    const η::R # step-size
+    const α::R # linesearch reduction factor
+    const atol::R # absolute gradient norm tolerance
+    const rtol::R # relative gradient norm tolerance
 end
 
 """
@@ -49,19 +49,43 @@ Constructor for `NewtonOptimizer`.
 """
 function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
 
-    #Hessian Lipschitz constant
+    # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
 
-    #Linesearch parameters
+    # Linesearch parameters
     if isnothing(linesearch)
         @assert 0<η && η≤1
         linesearch = (args...) -> return true
     end
 
-    #Solver
+    # Solver
     solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
     return NewtonOptimizer(solver, R2(M), linesearch, η, α, atol, rtol)
+end
+
+"""
+Perform setup operations before beginning optimization process.
+
+# Arguments
+- `opt::NewtonOptimizer`: Optimizer
+- `stats::QuasiNewtonStats`: Optimization Statistics
+- `x::S`: Current iterate.
+- `f::F1`: Objective function.
+- `fg!::F2`: In-place gradient function.
+- `fval::R`: Current function value at `x`.
+- `g::S`: Gradient vector at `x`.
+- `g_norm::R`: Gradient norm
+- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+
+# Updates
+- `opt`
+
+# Returns
+- `nothing`
+"""
+@inline function setup!(opt::NewtonOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+    return nothing
 end
 
 """
@@ -96,10 +120,10 @@ Uses:
 - `p::Vector`: Search direction.
 """
 mutable struct NewtonSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
-    workspace::W #krylov workspace
-    const posdef::Bool #positive definite
-    const krylov_order::Int #maximum Krylov subspace size
-    p::S #search direction
+    workspace::W # krylov workspace
+    const posdef::Bool # positive definite
+    const krylov_order::Int # maximum Krylov subspace size
+    p::S # search direction
 end
 
 @inline function newton_solver(dim::Int, type::Type{<:AbstractVector{<:AbstractFloat}}, krylov_order::Int, ::Val{true})
@@ -149,19 +173,19 @@ Compute a single Newton step using `NewtonSolver`.
 """
 function step!(opt::NewtonOptimizer, solver::NewtonSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
-    #Regularization
+    # Regularization
     λ = regularizer(opt, g_norm)
 
     update_λ!(stats, λ)
 
-    #Tolerance
+    # Tolerance
     ζ = 0.5
     ξ = R(0.01)
 
     atol = max(sqrt(eps(R)), min(ξ, ξ*λ^(1+ζ)))
     rtol = max(sqrt(eps(R)), min(ξ, ξ*λ^(ζ)))
 
-    #Solve
+    # Solve
     if solver.posdef
         krylov_solve!(solver.workspace, H, -g, [λ], itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
     else

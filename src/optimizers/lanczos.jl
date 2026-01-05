@@ -63,7 +63,7 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 			axpy!(-αtmp, qᵢ, q)
 		end
 
-		d[i] = αᵢ #Tᵢ.ᵢ = αᵢ
+		d[i] = αᵢ # Tᵢ.ᵢ = αᵢ
 		βᵢ₊₁ = norm2(q)
 
 		if βᵢ₊₁ ≤ eps(R)
@@ -74,7 +74,7 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
             rmul!(qᵢ₊₁, inv(βᵢ₊₁))
 		end
 
-		dl[i] = βᵢ₊₁ #Tᵢ₊₁.ᵢ = βᵢ₊₁
+		dl[i] = βᵢ₊₁ # Tᵢ₊₁.ᵢ = βᵢ₊₁
 	end
 
 	return Q, SymTridiagonal(d, dl[1:end-1]), dl[end]
@@ -95,9 +95,9 @@ function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalization::Bool=false) w
     m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
     n == p || throw(DimensionMismatch("Lanczos requires a compatible block"))
 
-	#preallocate
+	# Preallocate
     Q = zeros(R, n, (k+1)*b)
-	T = zeros(R, k*b, k*b) #dense block-tridgiagonal
+	T = zeros(R, k*b, k*b) # dense block-tridgiagonal
 
     A_i = zeros(R, b, b)
     B_i = zeros(R, b, b)
@@ -109,35 +109,34 @@ function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalization::Bool=false) w
 
 	QAi = zeros(R, n, b)
 
-    #Initial block normalization; identical to scalar case when b=1
-    V, R1 = qr(Ω)  #reduced QR
+    # Initial block normalization; identical to scalar case when b=1
+    V, R1 = qr(Ω)  # reduced QR
 	Q[:,1:b] .= Matrix(V)
     B1 = UpperTriangular(R1)
 
     for i = 1:k
-        #Location of blocks in Q and T
+        # Location of blocks in Q and T
         blk = (i-1)*b+1 : i*b
         blk_next = i*b+1 : (i+1)*b
 
         V_i = view(Q, :, blk)
         V_next = view(Q, :, blk_next)
 
-        #q = A * V_i
-		mul!(QAi, Z, V_i)
+		mul!(QAi, Z, V_i) # q = A * V_i
 
-        #subtract V_{i-1}*B_i   (does the right thing for b=1)
+        # Subtract V_{i-1}*B_i   (does the right thing for b=1)
         if i ≥ 2
             V_prev = view(Q, :, blk .- b)
             QAi .-= V_prev*B_i
         end
 
-        #compute A_i = V_i' * QAi
+        # compute A_i = V_i' * QAi
 		mul!(A_i, V_i', QAi)
 
-        #q -= V_i * A_i
+        # q -= V_i * A_i
         QAi .-= V_i*A_i
 
-        #selective reorthogonalization (same as scalar)
+        # selective reorthogonalization (same as scalar)
         if reorthogonalization
             if i > 1
                 mul!(ABtmp, V_prev', QAi)
@@ -149,22 +148,22 @@ function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalization::Bool=false) w
             QAi .-= V_i * ABtmp
         end
 
-        #save A_i in T
+        # save A_i in T
         T[blk, blk] .= A_i
 
-        #orthogonalize QAi → V_next, B_ip1 = QR factor
+        # orthogonalize QAi → V_next, B_ip1 = QR factor
         V, Rnew = qr(QAi)
 		V_next[:,:] .= Matrix(V)
         B_ip1 .= UpperTriangular(Rnew)
 
-        #save B_ip1 in T
+        # save B_ip1 in T
         if i < k
             blk_below = blk_next
             T[blk_below, blk] .= B_ip1
             T[blk, blk_below] .= B_ip1'
         end
 
-        #shift B_i ← B_ip1
+        # shift B_i ← B_ip1
         B_i .= B_ip1
     end
 

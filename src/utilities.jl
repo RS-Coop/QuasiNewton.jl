@@ -12,19 +12,19 @@ export QuasiNewtonStats
 #########################################################
 
 mutable struct QuasiNewtonStats{R<:Real}
-    history::Bool #sequence history
-    converged::Bool #whether optimizer has converged
-    iterations::Int #number of optimizer iterations
-    f_evals::Int #number of function evaluations
-    g_evals::Int #number of gradient evaluations
-    hvp_evals::Int #number of hvp evaluations
-    runtime::Float64 #iteration runtime
-    f_seq::Vector{R} #function value sequence
-    g_seq::Vector{R} #gradient norm sequence
-    r_seq::Vector{Union{R,Missing}} #residual norm sequence
-    λ_seq::Vector{Union{R,Missing}} #regularization tracking
-    k_seq::Vector{Union{Int,Missing}} #number of Krylov iterations
-    status::String #exit status
+    history::Bool # sequence history
+    converged::Bool # whether optimizer has converged
+    iterations::Int # number of optimizer iterations
+    f_evals::Int # number of function evaluations
+    g_evals::Int # number of gradient evaluations
+    hvp_evals::Int # number of hvp evaluations
+    runtime::Float64 # iteration runtime
+    f_seq::Vector{R} # function value sequence
+    g_seq::Vector{R} # gradient norm sequence
+    r_seq::Vector{Union{R,Missing}} # residual norm sequence
+    λ_seq::Vector{Union{R,Missing}} # regularization tracking
+    k_seq::Vector{Union{Int,Missing}} # number of Krylov iterations
+    status::String # exit status
 
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
         return new{R}(history, false,

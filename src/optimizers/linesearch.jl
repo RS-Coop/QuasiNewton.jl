@@ -31,7 +31,7 @@ Perform a cubic-order backtracking line search.
 # Returns
 - `status::Bool`: Always returns `true`.
 """
-function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
     # Setup
     p = opt.solver.p
@@ -97,7 +97,7 @@ Perform an in-place regularization-based line search.
 # Returns
 - `status::Bool`: Always returns `true`.
 """
-function search_M!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function search_M!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     # Setup
     p = opt.solver.p
@@ -108,14 +108,14 @@ function search_M!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::
     # Target decrement
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
-    if p_norm ≥ sqrt(eps(R)) && f(x+p)-fval ≤ dec #success
-        opt.M = clamp(R(opt.M)*opt.α, R(1e-8), R(1e8)) #decrease regularization
-    else #failure
-        opt.M = clamp(R(opt.M)/opt.α, R(1e-8), R(1e8)) #increase regularization
+    if p_norm ≥ sqrt(eps(R)) && f(x+p)-fval ≤ dec # success
+        opt.M = clamp(R(opt.M)*opt.α, R(1e-8), R(1e8)) # decrease regularization
+    else # failure
+        opt.M = clamp(R(opt.M)/opt.α, R(1e-8), R(1e8)) # increase regularization
 
         p .= zero(R)
 
-        # status = false #NOTE: Not setting this to false, as we don't want to exit
+        # status = false # NOTE: Not setting this to false, as we don't want to exit
     end
 
     stats.f_evals += 1
@@ -148,7 +148,7 @@ Perform an in-place step-size line search.
 # Returns
 - `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
 """
-function search_η!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {O<:Union{NewtonOptimizer, RSFNOptimizer}, F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     # Setup
     p = opt.solver.p
@@ -180,9 +180,9 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval:
             opt.M = clamp(isone(η) ? R(opt.M)*opt.α : R(opt.M)/opt.α, R(1e-8), R(1e8))
             break
         else
-            η *= opt.α #reduce step-size
-            p .*= opt.α #scale search direction
-            dec *= opt.α^2 #scale decrement
+            η *= opt.α # reduce step-size
+            p .*= opt.α # scale search direction
+            dec *= opt.α^2 # scale decrement
         end
 
         # Check step-size

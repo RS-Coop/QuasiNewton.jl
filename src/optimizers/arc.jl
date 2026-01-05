@@ -24,7 +24,7 @@ Adaptive Regularization with Cubics (ARC) optimizer.
 - `rtol::Float`: Relative gradient norm tolerance.
 """
 mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
-    solver::Q #search direction solver
+    solver::Q # search direction solver
     M::R1 #
     const linesearch!::F
     const η::R2 #
@@ -32,8 +32,8 @@ mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:Abs
     const η2::R2 #
     const γ1::R2 #
     const γ2::R2 #
-    const atol::R2 #absolute gradient norm tolerance
-    const rtol::R2 #relative gradient norm tolerance
+    const atol::R2 # absolute gradient norm tolerance
+    const rtol::R2 # relative gradient norm tolerance
 end
 
 """
@@ -65,6 +65,30 @@ function ARCOptimizer(dim::Int; M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0
     return ARCOptimizer(solver, M, search_ARC!, 1.0, η1, η2, γ1, γ2, atol, rtol)
 end
 
+"""
+Perform setup operations before beginning optimization process.
+
+# Arguments
+- `opt::ARCOptimizer`: Optimizer
+- `stats::QuasiNewtonStats`: Optimization Statistics
+- `x::S`: Current iterate.
+- `f::F1`: Objective function.
+- `fg!::F2`: In-place gradient function.
+- `fval::R`: Current function value at `x`.
+- `g::S`: Gradient vector at `x`.
+- `g_norm::R`: Gradient norm
+- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+
+# Updates
+- `opt`
+
+# Returns
+- `nothing`
+"""
+@inline function setup!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+    return nothing
+end
+
 #########################################################
 # ARC Solver
 #########################################################
@@ -79,10 +103,10 @@ ARC subproblem solver using shifted CG Lanczos.
 - `p::Vector`: Computed search direction.
 """
 mutable struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
-    workspace::W #Krylov workspace
-    const krylov_order::Int #maximum Krylov subspace size
-    const shifts::S #shifts
-    p::S #search direction
+    workspace::W # Krylov workspace
+    const krylov_order::Int # maximum Krylov subspace size
+    const shifts::S # shifts
+    p::S # search direction
 end
 
 """
@@ -99,10 +123,10 @@ Constructor for `ARCSolver`.
 """
 function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, num_shifts::Int=61, krylov_order::Int=0)
 
-    #Shifts
+    # Shifts
     shifts = 10.0 .^ range(-10.0,20.0,length=num_shifts)
 
-    #Krylov workspace
+    # Krylov workspace
     workspace = CgLanczosShiftWorkspace(dim, dim, num_shifts, type)
 
     return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
@@ -127,14 +151,14 @@ Compute a single ARC step using `ARCSolver`.
 """
 function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
-    #Tolerance
+    # Tolerance
     ζ = 0.5
     ξ = R(0.01)
 
     atol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(1+ζ)))
     rtol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(ζ)))
 
-    #Solver callback, exits when at least one solution that will work has been found
+    # Solver callback, exits when at least one solution that will work has been found
     cb = (slv) -> begin
         for i = eachindex(solver.shifts)
             if !slv.not_cv[i] && (norm(slv.x[i]) / solver.shifts[i] - opt.M > 0)
@@ -144,7 +168,7 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H:
         return false
     end
 
-    #Solve subproblem
+    # Solve subproblem
     krylov_solve!(solver.workspace, H, -g, solver.shifts, itmax=solver.krylov_order, timemax=max_time, check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=true)
 
     update_k!(stats, iteration_count(solver.workspace))
@@ -177,9 +201,9 @@ In-place ARC search direction update.
 # Returns
 - `status::Bool`: True if step accepted, false otherwise.
 """
-function search_ARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, f::F1, fg!::F2, fval::R, g::S, g_norm::R, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function search_ARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
-    #Cubic sub-problem
+    # Cubic sub-problem
     res = similar(g)
     @inline cubic_subprob = (d) -> begin
         mul!(res, H, d)
@@ -205,7 +229,7 @@ function search_ARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, f::F1, fg
 
         ρ = (fval - f(x + X[j]))/(fval - cubic_subprob(X[j]))
 
-        #unsuccessful
+        # unsuccessful
         if ρ < opt.η1
             M_new = opt.M
 
@@ -219,17 +243,17 @@ function search_ARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, f::F1, fg
                 j += 1
             end
             
-        #successful
+        # successful
         else
             status = true
 
             update_λ!(stats, opt.solver.shifts[j])
             update_r!(stats, opt.solver.workspace.rNorms[j])
 
-            #step
+            # step
             opt.solver.p .= X[j]
 
-            #very successful
+            # very successful
             if ρ > opt.η2
                 M_new = opt.γ2*opt.M
             else
