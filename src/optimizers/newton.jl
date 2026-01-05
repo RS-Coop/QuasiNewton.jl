@@ -13,21 +13,21 @@ Author: Cooper Simpson
 
 # Fields
 - `solver::QuasiNewtonSolver`: Solver for computing the search direction.
-- `M::Real`: Hessian regularization scaling.
+- `M::AbstractFloat`: Hessian regularization scaling.
 - `linesearch!::Function`: Linesearch function.
 - `η::AbstractFloat`: Step size.
 - `α::AbstractFloat`: Linesearch reduction factor.
 - `atol::AbstractFloat`: Absolute gradient tolerance.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
-mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
+mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F<:Function} <: QuasiNewtonOptimizer
     solver::Q #search direction solver
-    M::R1 #hessian regularization scaling
+    M::R #hessian regularization scaling
     const linesearch!::F #linesearch function
-    const η::R2 #step-size
-    const α::R2 #linesearch reduction factor
-    const atol::R2 #absolute gradient norm tolerance
-    const rtol::R2 #relative gradient norm tolerance
+    const η::R #step-size
+    const α::R #linesearch reduction factor
+    const atol::R #absolute gradient norm tolerance
+    const rtol::R #relative gradient norm tolerance
 end
 
 """
@@ -36,7 +36,7 @@ Constructor for `NewtonOptimizer`.
 # Arguments
 - `dim::Int`: Problem dimension.
 - `posdef::Bool`: Whether Hessian is positive definite (default: `false`).
-- `M::Real`: Hessian regularization scaling (default: `0.0`).
+- `M::Float`: Hessian regularization scaling (default: `0.0`).
 - `linesearch::Function`: Linesearch function (default: `backtrack!`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
 - `α::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
@@ -61,7 +61,7 @@ function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=b
     #Solver
     solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
-    return NewtonOptimizer(solver, M, linesearch, η, α, atol, rtol)
+    return NewtonOptimizer(solver, R2(M), linesearch, η, α, atol, rtol)
 end
 
 """
@@ -75,7 +75,7 @@ Compute regularization parameter for Newton optimizer.
 - `λ::Real`: Regularization parameter.
 """
 @inline function regularizer(opt::NewtonOptimizer, g_norm::R) where {R}
-    return iszero(opt.M) ? zero(g_norm) : max(min(sqrt(R(opt.M)*g_norm), R(1e16)), eps(R))
+    return iszero(opt.M) ? zero(g_norm) : clamp(sqrt(R(opt.M)*g_norm), eps(R), R(1e16))
 end
 
 #########################################################

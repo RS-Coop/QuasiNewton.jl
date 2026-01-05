@@ -135,7 +135,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
         @. g2 = g2 - grads - h*ζ
 
-        opt.M = min(R(1e8), norm(g2)/h^2)
+        opt.M = clamp(norm(g2)/h^2, R(1e-8), R(1e8))
 
         # println("M Estimate: ", opt.M)
     end
