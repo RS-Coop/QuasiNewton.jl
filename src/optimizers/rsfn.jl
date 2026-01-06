@@ -90,33 +90,6 @@ Perform setup operations before beginning optimization process.
 - `nothing`
 """
 @inline function setup!(opt::RSFNOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-    Mvals = [1e-8, 1., opt.M]
-
-    dec_max = -Inf
-    index_max = 0
-
-    original_depth = opt.solver.depth
-
-    for (i, M) in enumerate(Mvals)
-        opt.M = M
-        fill!(opt.solver.p, zero(R))
-        step!(opt, opt.solver, stats, H, g, g_norm)
-        opt.linesearch!(opt, stats, x, fval, g, g_norm, f, fg!, H)
-
-        dec = fval - f(x+opt.η*opt.solver.p)
-
-        if dec > dec_max
-            dec_max = dec
-            index_max = i
-        end
-    end
-
-    opt.M = Mvals[index_max]
-
-    opt.solver.depth = original_depth
-
-    println("M Search: ", opt.M)
-
     return nothing
 end
 

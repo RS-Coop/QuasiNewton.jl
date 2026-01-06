@@ -177,7 +177,27 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
         if f(x+p)-fval ≤ dec
             # Update regularization
-            opt.M = clamp(isone(η) ? R(opt.M)*opt.α : R(opt.M)/opt.α, R(1e-8), R(1e8))
+            # opt.M = clamp(isone(η) ? R(opt.M)*opt.α : R(opt.M)/opt.α, R(1e-8), R(1e8))
+
+            if true
+                h = sqrt(eps(R)) * max(one(R), norm(x))
+
+                ζ = deepcopy(p)
+                normalize!(ζ)
+
+                g2 = similar(ζ)
+                fg!(g2, @. x + h*ζ)
+                stats.g_evals += 1
+
+                mul!(ζ, H, ζ)
+
+                @. g2 = g2 - g - h*ζ
+
+                opt.M = clamp(norm(g2)/h^2, R(1e-8), R(1e8))
+
+                # println("M Estimate: ", opt.M)
+            end
+
             break
         else
             η *= opt.α # reduce step-size
