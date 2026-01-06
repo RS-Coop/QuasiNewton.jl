@@ -192,5 +192,5 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
     end
 
     # Fallback to basic backtracking if linesearch failed
-    return status || backtrack!(opt, stats, x, f, fg!, fval, g, g_norm, H)
+    return status || backtrack!(opt, stats, x, fval, g, g_norm, f, fg!, H)
 end
