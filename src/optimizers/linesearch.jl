@@ -66,7 +66,27 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
     p .*= η
 
     if !iszero(opt.M)
-        opt.M = clamp(isone(η) ? R(opt.M)*opt.α : R(opt.M)/opt.α, R(1e-8), R(1e8))
+        # opt.M = clamp(isone(η) ? R(opt.M)*opt.α : R(opt.M)/opt.α, R(1e-8), R(1e8))
+
+        if isone(η)
+                opt.M *= opt.α
+            else
+                ζ = deepcopy(p)
+
+                g2 = similar(ζ)
+                fg!(g2, @. x + ζ)
+                stats.g_evals += 1
+
+                mul!(ζ, H, ζ)
+
+                @. g2 = g2 - g - ζ
+
+                opt.M = norm(g2)/norm2(p)
+            end
+
+            opt.M = clamp(opt.M, R(1e-8), R(1e8))
+
+            # println("M Estimate: ", opt.M)
     end
 
     return status
