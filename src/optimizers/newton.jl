@@ -182,8 +182,8 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, stats::QuasiNewtonSta
     ζ = 0.5
     ξ = R(0.01)
 
-    atol = max(sqrt(eps(R)), min(ξ, ξ*λ^(1+ζ)))
-    rtol = max(sqrt(eps(R)), min(ξ, ξ*λ^(ζ)))
+    atol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(1+ζ)))
+    rtol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(ζ)))
 
     # Solve
     if solver.posdef
