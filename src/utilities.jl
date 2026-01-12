@@ -116,11 +116,9 @@ function printstat(io, label, x)
 end
 
 #########################################################
-
-#=
+"""
 Timer
-https://github.com/JuliaSmoothOptimizers/Krylov.jl/blob/main/src/krylov_utils.jl
-=#
+"""
 elapsed(tic::UInt64) = (time_ns()-tic)/1e9
 
 #########################################################

@@ -205,10 +205,10 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
     # Update stats
     stats.converged = converged
     stats.iterations = iterations
+    stats.runtime = elapsed(tic)
     stats.f_evals += iterations + 1
     stats.g_evals += iterations + 1
     stats.hvp_evals = H.nprod
-    stats.runtime = elapsed(tic)
 
     return stats
 end
