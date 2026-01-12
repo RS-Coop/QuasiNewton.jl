@@ -15,10 +15,10 @@ mutable struct QuasiNewtonStats{R<:Real}
     history::Bool # sequence history
     converged::Bool # whether optimizer has converged
     iterations::Int # number of optimizer iterations
+    runtime::Float64 # iteration runtime
     f_evals::Int # number of function evaluations
     g_evals::Int # number of gradient evaluations
     hvp_evals::Int # number of hvp evaluations
-    runtime::Float64 # iteration runtime
     f_seq::Vector{R} # function value sequence
     g_seq::Vector{R} # gradient norm sequence
     r_seq::Vector{Union{R,Missing}} # residual norm sequence
@@ -28,7 +28,7 @@ mutable struct QuasiNewtonStats{R<:Real}
 
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
         return new{R}(history, false,
-                        0, 0, 0, 0, 0.0,
+                        0, 0.0, 0, 0, 0,
                         Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)), 
                         history ? R[] : Union{R,Missing}[missing],
                         history ? R[] : Union{R,Missing}[missing],
