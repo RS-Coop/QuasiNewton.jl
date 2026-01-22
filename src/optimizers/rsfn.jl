@@ -231,7 +231,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     # Rank change
     if solver.min_depth != solver.max_depth
         if r_norm ≥ tol && level == 1
-            solver.depth = min(solver.max_depth, solver.depth*2)
+            solver.depth = min(solver.max_depth, ceil(Int, solver.depth*1.5))
         elseif r_norm ≤ R(1e-2)*tol && level == solver.levels
             solver.depth = max(solver.min_depth, div(solver.depth, 2))
         end
