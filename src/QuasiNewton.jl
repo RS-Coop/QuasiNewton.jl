@@ -9,6 +9,7 @@ module QuasiNewton
 	# Setup
 	#########################################################
 
+	using Printf
 	using LinearAlgebra
 	using LinearOperators
 	using DifferentiationInterface: prepare_gradient, prepare_hvp_same_point, value_and_gradient!, hvp!

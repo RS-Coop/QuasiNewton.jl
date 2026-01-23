@@ -4,7 +4,6 @@ Author: Cooper Simpson
 SFN optimizer stats
 =#
 
-using Printf
 using Statistics: mean
 
 export QuasiNewtonStats
