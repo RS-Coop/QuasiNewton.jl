@@ -48,7 +48,7 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
         
         stats.g_evals += 1
 
-        return dot(g, p)
+        return dot(p, g)
     end
 
     function ϕdϕ(t)
@@ -57,11 +57,11 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
         stats.g_evals += 1
 
-        dphi = dot(g, p)
+        dphi = dot(p, g)
         return (phi, dphi)
     end  
 
-    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, 1.0, fval, dot(p, g))
+    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, one(R), fval, dot(p, g))
 
     p .*= η
 
