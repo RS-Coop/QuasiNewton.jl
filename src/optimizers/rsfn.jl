@@ -144,7 +144,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=2, max_depth::Int=1000, levels::Int=1)
+function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=2, max_depth::Int=1000, levels::Int=1)
 
     if adapt
         min_depth, max_depth = min_depth, min(dim, max_depth)
@@ -220,7 +220,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     # Tolerance
     if isnan(tol)
         ζ = 0.5
-        ξ = R(0.01)
+        ξ = R(0.1)
 
         atol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(1+ζ)))
         rtol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(ζ)))
