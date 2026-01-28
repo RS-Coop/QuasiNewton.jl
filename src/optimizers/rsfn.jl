@@ -121,10 +121,12 @@ Lanczos-based R-SFN search direction solver.
 - `levels::Int`: Recursion levels.
 - `p::Vector`: Search direction.
 """
-mutable struct LFASolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
+mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewtonSolver
     depth::Int # krylov depth
     const min_depth::Int # minimum krylov depth
     const max_depth::Int # maximum krylov depth
+    const α₊::R # krylov depth increase factor
+    const α₋::R # krylov depth reduction factor
     const levels::Int # recursion levels
     p::S # search direction
 end
@@ -144,7 +146,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=2, max_depth::Int=dim, levels::Int=1)
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=2, max_depth::Int=dim, α₊::R=1.5, α₋::R=1.5, levels::Int=1) where {R<:AbstractFloat}
 
     if adapt
         min_depth, max_depth = min_depth, min(dim, max_depth)
@@ -152,7 +154,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vecto
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, levels, type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, α₊, α₋, levels, type(undef, dim))
 end
 
 """
@@ -231,9 +233,9 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     # Depth change
     if solver.min_depth != solver.max_depth
         if r_norm ≥ tol && level == 1
-            solver.depth = min(solver.max_depth, ceil(Int, solver.depth*1.5))
+            solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.α₊))
         elseif r_norm ≤ R(1e-2)*tol && level == solver.levels
-            solver.depth = max(solver.min_depth, div(solver.depth, 2))
+            solver.depth = max(solver.min_depth, floor(Int, solver.depth*solver.α₋))
         end
     end
 
