@@ -84,7 +84,7 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
                 opt.M = norm(g2)/norm2(p)
             end
 
-            opt.M = clamp(opt.M, R(1e-8), R(1e8))
+            opt.M = clamp(opt.M, R(1e-8), R(1e8)/g_norm)
 
             # println("M Estimate: ", opt.M)
     end
@@ -214,7 +214,7 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
                 opt.M = norm(g2)/norm2(p)
             end
 
-            opt.M = clamp(opt.M, R(1e-8), R(1e8))
+            opt.M = clamp(opt.M, R(1e-8), R(1e8)/g_norm)
 
             # println("M Estimate: ", opt.M)
 
