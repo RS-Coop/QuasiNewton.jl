@@ -99,7 +99,7 @@ Compute regularization parameter for Newton optimizer.
 - `λ::Real`: Regularization parameter.
 """
 @inline function regularizer(opt::NewtonOptimizer, g_norm::R) where {R}
-    return iszero(opt.M) ? zero(g_norm) : clamp(sqrt(R(opt.M)*g_norm), eps(R), R(1e16))
+    return iszero(opt.M) ? zero(g_norm) : clamp(sqrt(R(opt.M)*g_norm), eps(R), R(1e8))
 end
 
 #########################################################
