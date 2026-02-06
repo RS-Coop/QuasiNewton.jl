@@ -122,7 +122,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
     # Estimate regularization
     if isnan(opt.M)
-        h = sqrt(eps(R)) * max(one(R), norm(x))
+        h = sqrt(eps(R))*max(one(R), norm(x))
 
         ζ = randn(R, length(x))
         normalize!(ζ)
@@ -135,7 +135,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
         @. g2 = g2 - g - h*ζ
 
-        opt.M = clamp(norm(g2)/h^2, R(1e-8), R(1e8))
+        opt.M = clamp(norm2(g2)/h^2, R(1e-8), R(1e8))
 
         # println("M Estimate: ", opt.M)
     end
