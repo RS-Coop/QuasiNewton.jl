@@ -128,4 +128,3 @@ Fast 2-norm with type conversion.
     y = dot(x, x)
     return convert(R, sqrt(y))
 end
-

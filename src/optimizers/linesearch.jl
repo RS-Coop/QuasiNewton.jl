@@ -65,28 +65,17 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
     p .*= η
 
+    # Update regularization
     if !iszero(opt.M)
-        # opt.M = clamp(isone(η) ? R(opt.M)*opt.α : R(opt.M)/opt.α, R(1e-8), R(1e8))
-
         if isone(η)
-                opt.M *= opt.α
-            else
-                ζ = deepcopy(p)
+            M_est = opt.M*opt.α
+        else
+            opt.M = η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, norm2(p))
+        end
 
-                g2 = similar(ζ)
-                fg!(g2, @. x + ζ)
-                stats.g_evals += 1
+        opt.M = clamp(M_est, R(1e-8), R(1e8))
 
-                mul!(ζ, H, ζ)
-
-                @. g2 = g2 - g - ζ
-
-                opt.M = norm2(g2)/norm2(p)
-            end
-
-            opt.M = clamp(opt.M, R(1e-8), R(1e8))
-
-            # println("M Estimate: ", opt.M)
+        # println("M Estimate: ", opt.M)
     end
 
     return status
@@ -197,24 +186,13 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
         if f(x+p)-fval ≤ dec
             # Update regularization
-
             if isone(η)
-                opt.M *= opt.α
+                M_est = opt.M*opt.α
             else
-                ζ = deepcopy(p)
-
-                g2 = similar(ζ)
-                fg!(g2, @. x + ζ)
-                stats.g_evals += 1
-
-                mul!(ζ, H, ζ)
-
-                @. g2 = g2 - g - ζ
-
-                opt.M = norm2(g2)/norm2(p)
+                M_est = η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, p_norm)
             end
 
-            opt.M = clamp(opt.M, R(1e-8), R(1e8))
+            opt.M = clamp(M_est, R(1e-8), R(1e8))
 
             # println("M Estimate: ", opt.M)
 
@@ -222,6 +200,7 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
         else
             η *= opt.α # reduce step-size
             p .*= opt.α # scale search direction
+            p_norm *= opt.α # scale norm
             dec *= opt.α^2 # scale decrement
         end
 

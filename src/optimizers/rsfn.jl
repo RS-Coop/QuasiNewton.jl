@@ -104,7 +104,7 @@ Compute regularization parameter for R-SFN.
 - `λ::Real`: Regularization parameter.
 """
 @inline function regularizer(opt::RSFNOptimizer, g_norm::R) where {R}
-    return iszero(opt.M) ? zero(g_norm) : clamp(R(opt.M)*g_norm, eps(R), R(1e8))
+    return iszero(opt.M) ? zero(g_norm) : clamp(R(opt.M)*g_norm, eps(R), R(1e16))
 end
 
 #########################################################
@@ -146,7 +146,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=2, max_depth::Int=dim, α₊::R=1.5, α₋::R=2.0, levels::Int=1) where {R<:AbstractFloat}
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, α₊::R=1.5, α₋::R=2.0, levels::Int=1) where {R<:AbstractFloat}
 
     if adapt
         min_depth, max_depth = min_depth, min(dim, max_depth)

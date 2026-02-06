@@ -259,3 +259,39 @@ In-place matrix-vector multiplication with `ADHvpOperator`.
 
 	return y
 end
+
+#########################################################
+
+"""
+Hessian Lipschitz estimate.
+"""
+@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
+    h = eps(R)^(1/3)*max(one(R), norm(x))
+    
+    ζ = randn(R, length(x))
+    normalize!(ζ)
+    
+    g2 = similar(x)
+    fg!(g2, @. x + h*ζ)
+    stats.g_evals += 1
+
+    mul!(ζ, H, ζ)
+
+    @. g2 = g2 - g - h*ζ
+
+    return norm2(g2)/h^2
+end
+
+@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv, p::S, p_norm::R=norm2(p)) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
+    ζ = copy(p)
+    
+    g2 = similar(x)
+    fg!(g2, @. x + ζ)
+    stats.g_evals += 1
+
+    mul!(ζ, H, ζ)
+
+    @. g2 = g2 - g - ζ
+
+    return norm2(g2)/p_norm^2
+end
