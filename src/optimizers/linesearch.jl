@@ -67,11 +67,12 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
     # Update regularization
     if !iszero(opt.M)
-        if isone(η)
-            M_est = opt.M*opt.α
-        else
-            opt.M = η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, norm2(p))
-        end
+        M_est =
+            if isone(η)
+                opt.M*opt.α
+            else
+                η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, norm2(p))
+            end
 
         opt.M = clamp(M_est, R(1e-8), R(1e8))
 
@@ -186,11 +187,12 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
         if f(x+p)-fval ≤ dec
             # Update regularization
-            if isone(η)
-                M_est = opt.M*opt.α
-            else
-                M_est = η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, p_norm)
-            end
+            M_est =
+                if isone(η)
+                    opt.M*opt.α
+                else
+                    η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, p_norm)
+                end
 
             opt.M = clamp(M_est, R(1e-8), R(1e8))
 
