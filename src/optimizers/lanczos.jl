@@ -9,47 +9,49 @@ Author: Cooper Simpson
 """
 Scalar Lanczos process.
 
-NOTE: Adapted from Krylov.jl (src/krylov_processes.jl)
+# Arguments
+- `Z::Matrix`: Symmetric matrix
+- `ω::Vector`: Vector
+- `k::Int`: Krylov subspace depth
+- `reorthogonalize::Bool`: Whether to perform partial reorthogonalization.
 """
-function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonalization::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
-	m, n = size(A)
+function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+	m, n = size(Z)
 	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
 
+    # Preallocate
 	β₁ = zero(R)
 	Q = Matrix{R}(undef, n, k+1)
 
-	d = zeros(R, k)
-	dl = zeros(R, k)
+	d = zeros(R, k) # diagonal elements
+	dl = zeros(R, k) # lower (and upper) diagonal elements
 
 	for i = 1:k
 		qᵢ = view(Q,:,i)
 		qᵢ₊₁ = q = view(Q,:,i+1)
 
 		if i == 1
-            β₁ = norm2(b)
+            β₁ = norm2(ω)
 			if β₁ == 0
-				!allow_breakdown && error("Exact breakdown β₁ == 0.")
-				fill!(qᵢ, zero(R))
+				error("Exact breakdown β₁ == 0.")
 			else
-                copyto!(qᵢ, b)
+                copyto!(qᵢ, ω)
                 rmul!(qᵢ, inv(β₁))
 			end
 		end
 
-		mul!(q, A, qᵢ)
+		mul!(q, Z, qᵢ)
 
 		if i ≥ 2
 			qᵢ₋₁ = view(Q,:,i-1)
-			βᵢ = dl[i-1] #βᵢ = Tᵢ.ᵢ₋₁
+			βᵢ = dl[i-1]
 			axpy!(-βᵢ, qᵢ₋₁, q)
 		end
 
 		αᵢ = dot(qᵢ, q)
 		axpy!(-αᵢ, qᵢ, q)
 
-		"""
-		Selective reorthogonalization against last two vectors.
-		"""
+		# Selective reorthogonalization against last two vectors.
 		if reorthogonalization
 			if i ≥ 2
 				qᵢ₋₁ = view(Q,:,i-1)
@@ -63,21 +65,21 @@ function lanczos(A::M, b::S, k::Int; allow_breakdown::Bool=false, reorthogonaliz
 			axpy!(-αtmp, qᵢ, q)
 		end
 
-		d[i] = αᵢ # Tᵢ.ᵢ = αᵢ
+		d[i] = αᵢ
 		βᵢ₊₁ = norm2(q)
 
 		if βᵢ₊₁ ≤ eps(R)
-			!allow_breakdown && error("Breakdown βᵢ₊₁ ≤ eps at iteration i = $i.")
+			error("Breakdown βᵢ₊₁ ≤ eps at iteration i = $i.")
 			fill!(qᵢ₊₁, zero(R))
 		else
             copyto!(qᵢ₊₁, q)
             rmul!(qᵢ₊₁, inv(βᵢ₊₁))
 		end
 
-		dl[i] = βᵢ₊₁ # Tᵢ₊₁.ᵢ = βᵢ₊₁
+		dl[i] = βᵢ₊₁
 	end
 
-	return Q, SymTridiagonal(d, dl[1:end-1]), dl[end]
+	return Q, SymTridiagonal(d, view(dl,1:k-1)), dl[end]
 end
 
 #########################################################
@@ -87,9 +89,13 @@ end
 """
 Block Lanczos process.
 
-NOTE: Adapted from Krylov.jl (src/block_krylov_processes.jl)
+# Arguments
+- `Z::Matrix`: Symmetric matrix
+- `Ω::Vector`: Matrix
+- `k::Int`: Krylov subspace depth
+- `reorthogonalize::Bool`: Whether to perform partial reorthogonalization.
 """
-function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalization::Bool=false) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
+function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalize::Bool=false) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
     m, n = size(Z)
 	p, b = size(Ω)
     m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
@@ -122,48 +128,43 @@ function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalization::Bool=false) w
         V_i = view(Q, :, blk)
         V_next = view(Q, :, blk_next)
 
-		mul!(QAi, Z, V_i) # q = A * V_i
+		mul!(QAi, Z, V_i)
 
-        # Subtract V_{i-1}*B_i   (does the right thing for b=1)
+        # Subtract V_{i-1}*B_i
         if i ≥ 2
             V_prev = view(Q, :, blk .- b)
             QAi .-= V_prev*B_i
         end
 
-        # compute A_i = V_i' * QAi
 		mul!(A_i, V_i', QAi)
-
-        # q -= V_i * A_i
         QAi .-= V_i*A_i
 
-        # selective reorthogonalization (same as scalar)
+        # Selective reorthogonalization against last two blocks
         if reorthogonalization
             if i > 1
                 mul!(ABtmp, V_prev', QAi)
                 B_i .+= ABtmp
                 QAi .-= V_prev * ABtmp
             end
+
 			mul!(ABtmp, V_i', QAi)
             A_i .+= ABtmp
             QAi .-= V_i * ABtmp
         end
 
-        # save A_i in T
         T[blk, blk] .= A_i
 
-        # orthogonalize QAi → V_next, B_ip1 = QR factor
+        # Orthogonalize
         V, Rnew = qr(QAi)
 		V_next[:,:] .= Matrix(V)
         B_ip1 .= UpperTriangular(Rnew)
 
-        # save B_ip1 in T
         if i < k
             blk_below = blk_next
             T[blk_below, blk] .= B_ip1
             T[blk, blk_below] .= B_ip1'
         end
 
-        # shift B_i ← B_ip1
         B_i .= B_ip1
     end
 
@@ -173,8 +174,7 @@ end
 """
 Potentially an improved Block Lanczos function. Not tested or guaranteed to work at all.
 """
-function block_lanczos_fa(Z::M1, Ω::M2, k::Int; reorthogonalization::Bool=false) where
-        {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
+function block_lanczos_fa(Z::M1, Ω::M2, k::Int; reorthogonalize::Bool=false) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
 
     m, n = size(Z)
     p, b = size(Ω)

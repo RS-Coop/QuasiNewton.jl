@@ -183,7 +183,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     update_λ!(stats, λ)
 
     # Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, allow_breakdown=true, reorthogonalization=true)
+    Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, reorthogonalize=true)
 
     if level == solver.levels
         update_k!(stats, solver.depth)
@@ -318,7 +318,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
 
     block_depth = solver.block_size*solver.depth # total size i.e. "rank"
 
-    Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalization=true)
+    Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalize=true)
 
     update_k!(stats, solver.depth)
 
