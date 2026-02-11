@@ -52,7 +52,7 @@ function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:
 		axpy!(-αᵢ, qᵢ, q)
 
 		# Selective reorthogonalization against last two vectors.
-		if reorthogonalization
+		if reorthogonalize
 			if i ≥ 2
 				qᵢ₋₁ = view(Q,:,i-1)
 				βtmp = dot(qᵢ₋₁, q)
@@ -69,7 +69,7 @@ function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:
 		βᵢ₊₁ = norm2(q)
 
 		if βᵢ₊₁ ≤ eps(R)
-			error("Breakdown βᵢ₊₁ ≤ eps at iteration i = $i.")
+			# error("Breakdown βᵢ₊₁ ≤ eps at iteration i = $i.")
 			fill!(qᵢ₊₁, zero(R))
 		else
             copyto!(qᵢ₊₁, q)
@@ -79,7 +79,7 @@ function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:
 		dl[i] = βᵢ₊₁
 	end
 
-	return Q, SymTridiagonal(d, view(dl,1:k-1)), dl[end]
+	return Q, SymTridiagonal(d, dl[1:k-1]), dl[end]
 end
 
 #########################################################
@@ -140,7 +140,7 @@ function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalize::Bool=false) where
         QAi .-= V_i*A_i
 
         # Selective reorthogonalization against last two blocks
-        if reorthogonalization
+        if reorthogonalize
             if i > 1
                 mul!(ABtmp, V_prev', QAi)
                 B_i .+= ABtmp
