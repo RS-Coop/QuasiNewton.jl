@@ -189,9 +189,9 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
             # Update regularization
             M_est =
                 if isone(η)
-                    α = 1 - clamp(p_norm / (1 + p_norm), 0.1, 0.9)
-                    opt.M*α
-                    # opt.M*opt.α
+                    # α = 1 - clamp(p_norm / (1 + p_norm), 0.1, 0.9)
+                    # opt.M*α
+                    opt.M*opt.α
                 else
                     η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, p_norm)
                 end
