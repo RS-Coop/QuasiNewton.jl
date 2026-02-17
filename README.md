@@ -9,7 +9,7 @@ A collection of quasi-Newton optimization algorithms.
 ## License & Citation
 All source code is made available under an MIT license. You can freely use and modify the code, without warranty, so long as you provide attribution to the authors. See `LICENSE` for the full text.
 
-This repository can be cited using the GitHub action in the sidebar, or using the metadata in `CITATION.cff`. See [Publications](#publications) for a full list of publications related to R-SFN and influencing this package. If any of these are useful to your own work, please cite them individually.
+This repository can be cited using the GitHub action in the sidebar, or using the metadata in `CITATION.cff`. See [Publications](#publications) for a full list of publications related to R-SFN and influencing this package. Please cite these individually when relevant for your own work.
 
 ## Contributing
 Feel free to open issues, ask questions, or otherwise contribute!
@@ -172,7 +172,7 @@ Status:                  Nominal
 ```
 
 ## Publications
-More information about R-SFN in can be found in the following publications. Please cite them if they are useful for your own work!
+More information about R-SFN in can be found in the following publications. Please cite them as appropriate!
 
 ### [Regularized Saddle-Free Newton: Saddle Avoidance and Efficient Implementation](https://rs-coop.github.io/projects/research/rsfn)
 ```bibtex
