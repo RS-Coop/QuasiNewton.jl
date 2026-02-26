@@ -281,7 +281,7 @@ Hessian Lipschitz estimate.
 
 	M_est = norm2(g2)/h^2
 
-    return isnan(M_est) ? 1e0 : M_est
+    return isnan(M_est) ? 1e0 : 2*M_est
 end
 
 @inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv, p::S, p_norm::R=norm2(p)) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
@@ -297,5 +297,5 @@ end
 
     M_est = norm2(g2)/p_norm^2
 
-	return isnan(M_est) ? 1e0 : M_est
+	return isnan(M_est) ? 1e0 : 2*M_est
 end
