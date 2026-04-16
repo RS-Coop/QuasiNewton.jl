@@ -48,12 +48,13 @@ Form the full Hessian matrix from a Hessian-vector product operator.
 	H_mat = Matrix{R}(undef, n, n)
 
 	ei = zeros(R, n)
-	col = similar(ei)
 
 	@inbounds for i = 1:n
 		ei[i] = one(R)
+
+		col = view(A,:,i)
 		mul!(col, H, ei)
-		H_mat[:,i] .= col
+		
 		ei[i] = zero(R)
 	end
 
