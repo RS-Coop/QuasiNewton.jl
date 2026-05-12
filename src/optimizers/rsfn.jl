@@ -177,6 +177,9 @@ Compute a single R-SFN step using `LFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
+    # Reset search direction
+    fill!(solver.p, zero(R))
+
     # Regularization
     λ = regularizer(opt, g_norm)
 
@@ -267,6 +270,7 @@ mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:Abstrac
     block_size::Int # krylov block size
     Ω::M # block RHS
     p::S # search direction
+    enrichment_flag::Bool
 end
 
 """
@@ -281,12 +285,12 @@ Constructor for `BlockLFASolver`.
 # Returns
 - `BlockLFASolver` instance.
 """
-function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=floor(Int, log2(dim)), block_size::Int=2)
+function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=floor(Int, log2(dim)), block_size::Int=2, enrichment_flag::Bool=true)
     if block_size > dim
         block_size = min(dim÷depth, block_size)
     end
 
-    return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim))
+    return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim), enrichment_flag)
 end
 
 """
@@ -308,6 +312,9 @@ Compute a single R-SFN step using `BlockLFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
+    # Reset search direction
+    # fill!(solver.p, zero(R))
+
     # Regularization
     λ = regularizer(opt, g_norm)
 
@@ -315,6 +322,10 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
 
     # Block Lanczos + eigendecomposition
     solver.Ω[:,1] = g
+
+    if solver.enrichment_flag
+        solver.Ω[:,2] = solver.p
+    end
 
     block_depth = solver.block_size*solver.depth # total size i.e. "rank"
 
@@ -390,6 +401,9 @@ Compute a single R-SFN step using `EigenLFASolver`.
 - `stats` with iteration info.
 """
 function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+
+    # Reset search direction
+    fill!(solver.p, zero(R))
 
     # Regularization
     λ = regularizer(opt, g_norm)

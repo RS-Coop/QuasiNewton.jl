@@ -160,9 +160,6 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
         # Step
         ##########
-        # Reset search direction
-        fill!(opt.solver.p, zero(R))
-
         # Solve for search direction
         step!(opt, opt.solver, stats, H, g, g_norm; max_time=max_time-time)
 

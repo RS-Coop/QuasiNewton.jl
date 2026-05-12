@@ -151,6 +151,9 @@ Compute a single ARC step using `ARCSolver`.
 """
 function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
     
+    # Reset search direction
+    fill!(solver.p, zero(R))
+
     # Tolerance
     ζ = 0.5
     ξ = R(0.01)
@@ -174,6 +177,74 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H:
     update_k!(stats, iteration_count(solver.workspace))
 
     return
+end
+
+#########################################################
+# Block Lanczos ARC Solver
+#########################################################
+
+mutable struct BlockARCSolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}} <: QuasiNewtonSolver
+    const shifts::S # shifts
+    depth::Int # krylov depth
+    block_size::Int # krylov block size
+    Ω::M # block RHS
+    p::M # search directions
+    enrichment_flag::Bool
+    idx_first::Int
+end
+
+function BlockARCSolver(dim::Int; type::Type{<:AbstractMatrix{<:AbstractFloat}}=Matrix{Float64}, num_shifts::Int=61, depth::Int=floor(Int, log2(dim)), block_size::Int=2, enrichment_flag::Bool=true)
+
+    # Shifts
+    shifts = 10.0 .^ range(-10.0,20.0,length=num_shifts)
+
+    return BlockARCSolver(shifts, depth, block_size, randn(dim, block_size), type(undef, dim, num_shifts), enrichment_flag, 1)
+end
+
+function step!(opt::ARCOptimizer, solver::BlockARCSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+    
+    # Reset search direction
+    # fill!(solver.p, zero(R))
+
+    # Block Lanczos + eigendecomposition
+    solver.Ω[:,1] = g
+
+    if solver.enrichment_flag
+        solver.Ω[:,2] = solver.p
+    end
+
+    block_depth = solver.block_size*solver.depth # total size i.e. "rank"
+
+    Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalize=true)
+
+    update_k!(stats, solver.depth)
+
+    E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
+
+    Emin = minimum(E.values)
+    solver.idx_first = findfirst(s -> s > Emin, shifts)
+
+    # Update search directions
+    tmp1 = similar(g, block_depth)
+    tmp2 = similar(g, block_depth)
+
+    v1 = @view V[1,:]
+
+    for i in solver.idx_first:length(solver.shifts)
+
+        σ = solver.shifts[i]
+
+        # tmp1 = (Λ + σI)^(-1) Vᵀ(B₁e₁)
+        @. tmp1 = (B1[1,1] * v1) / (λ + σ)
+
+        # tmp2 = V * tmp1
+        mul!(tmp2, V, tmp1)
+
+        # p = -Q * tmp2
+        mul!(@view(solver.p[:,i]), Q, tmp2, -1.0, 0.0)
+    end
+
+	return
 end
 
 #########################################################
