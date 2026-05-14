@@ -312,20 +312,20 @@ Compute a single R-SFN step using `BlockLFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
-    # Reset search direction
-    fill!(solver.p, zero(R))
-
     # Regularization
     λ = regularizer(opt, g_norm)
 
     update_λ!(stats, λ)
 
     # Block Lanczos + eigendecomposition
-    solver.Ω[:,1] = g
+    @views solver.Ω[:,1] = g
 
     if solver.enrichment_flag
-        solver.Ω[:,2] = solver.p
+        @views solver.Ω[:,2] = solver.p
     end
+
+    # Reset search direction
+    fill!(solver.p, zero(R))
 
     block_depth = solver.block_size*solver.depth # total size i.e. "rank"
 
