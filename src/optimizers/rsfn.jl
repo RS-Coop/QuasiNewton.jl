@@ -320,9 +320,9 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     # Block Lanczos + eigendecomposition
     @views solver.Ω[:,1] = g
 
-    if solver.enrichment_flag
-        @views solver.Ω[:,2] = solver.p
-    end
+    # if solver.enrichment_flag
+    #     @views solver.Ω[:,2] = solver.p
+    # end
 
     # Reset search direction
     fill!(solver.p, zero(R))
@@ -334,8 +334,15 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     update_k!(stats, solver.depth)
 
     E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
+    # emax = maximum(E.values)
+    # emin = minimum(E.values)
+    # println(emax, emin)
 
     # println(E.values)
+
+    if solver.enrichment_flag
+        @views mul!(solver.Ω[:,2], Q, E.vectors[:,1])
+    end
 
     # Update search direction
     cache1 = similar(g, block_depth)
