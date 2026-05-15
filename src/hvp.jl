@@ -52,7 +52,7 @@ Form the full Hessian matrix from a Hessian-vector product operator.
 	@inbounds for i = 1:n
 		ei[i] = one(R)
 
-		col = view(A,:,i)
+		col = view(H_mat,:,i)
 		mul!(col, H, ei)
 		
 		ei[i] = zero(R)

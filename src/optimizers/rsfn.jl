@@ -356,6 +356,7 @@ Full eigendecomposition R-SFN search direction solver.
 mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
     p::S # search direction
     cache::S # temporary memory
+    perturbation_flag::Bool
 end
 
 """
@@ -368,8 +369,8 @@ Constructor for `EigenSolver`.
 # Returns
 - `EigenSolver` instance.
 """
-function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64})
-    return EigenSolver(type(undef, dim), type(undef, dim))
+function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, perturbation_flag::Bool=false)
+    return EigenSolver(type(undef, dim), type(undef, dim), perturbation_flag)
 end
 
 """
@@ -400,9 +401,22 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats,
     E = eigen!(Matrix(H))
 
     # Update search direction
-    mul!(cache, E.vectors', -g)
-    @. cache *= pinv(sqrt(E.values^2+λ))
-    mul!(solver.p, E.vectors, cache)
+    mul!(solver.cache, E.vectors', -g)
+    @. solver.cache *= pinv(sqrt(E.values^2+λ))
+    mul!(solver.p, E.vectors, solver.cache)
+
+    # Add perturbation
+    if solver.perturbation_flag
+        μ, i = findmin(E.values)
+        if μ < 0 && 36*λ ≤ μ^2
+            solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
+            if dot(solver.cache, g) ≤ 0 
+                solver.p .+= (2*abs(μ)/opt.M)*E.vectors[:,i]
+            else
+                solver.p .-= (2*abs(μ)/opt.M)*E.vectors[:,i]
+            end
+        end
+    end
 
     return
 end
