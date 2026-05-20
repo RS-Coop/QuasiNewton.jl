@@ -341,7 +341,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     # println(E.values)
 
     if solver.enrichment_flag
-        @views mul!(solver.Ω[:,2], Q, E.vectors[:,1])
+        @views mul!(solver.Ω[:,2:solver.block_size], Q, E.vectors[:,1:solver.block_size-1])
     end
 
     # Update search direction
