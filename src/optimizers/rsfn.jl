@@ -129,6 +129,7 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     const α₋::R # krylov depth reduction factor
     const levels::Int # recursion levels
     p::S # search direction
+    perturbation_flag::Bool
 end
 
 """
@@ -146,7 +147,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, α₊::R=1.5, α₋::R=2.0, levels::Int=1) where {R<:AbstractFloat}
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, α₊::R=1.5, α₋::R=2.0, levels::Int=1, perturbation_flag::Bool=false) where {R<:AbstractFloat}
 
     if adapt
         min_depth, max_depth = min_depth, min(dim, max_depth)
@@ -154,7 +155,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, de
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, α₊, α₋, levels, type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, α₊, α₋, levels, type(undef, dim), perturbation_flag)
 end
 
 """
@@ -200,6 +201,18 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     # Temporary memory, NOTE: Can you get away with just one of these?
     cache1 = similar(g, solver.depth)
     cache2 = similar(g, solver.depth)
+
+    # Add perturbation
+    if solver.perturbation_flag
+        μ, i = findmin(E.values)
+        if μ < 0 && 36*λ ≤ μ^2
+            if E.vectors[1,i] ≤ 0
+                @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], (2*abs(μ)/opt.M), 1.0)
+            else
+                @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -(2*abs(μ)/opt.M), 1.0)
+            end
+        end
+    end
 
     # Update search direction
     @. E.values = pinv(sqrt(E.values^2+λ))
@@ -409,11 +422,11 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats,
     if solver.perturbation_flag
         μ, i = findmin(E.values)
         if μ < 0 && 36*λ ≤ μ^2
-            solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
+            @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
             if dot(solver.cache, g) ≤ 0 
-                solver.p .+= (2*abs(μ)/opt.M)*E.vectors[:,i]
+                solver.p .+= cache
             else
-                solver.p .-= (2*abs(μ)/opt.M)*E.vectors[:,i]
+                solver.p .-= cache
             end
         end
     end
