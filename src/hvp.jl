@@ -276,9 +276,10 @@ Hessian Lipschitz estimate.
     fg!(g2, @. x + h*ζ)
     stats.g_evals += 1
 
-    mul!(ζ, H, ζ)
+	y = similar(ζ)
+    mul!(y, H, ζ)
 
-    @. g2 = g2 - g - h*ζ
+    @. g2 = g2 - g - h*y
 
 	M_est = norm2(g2)/h^2
 
@@ -292,9 +293,10 @@ end
     fg!(g2, @. x + ζ)
     stats.g_evals += 1
 
-    mul!(ζ, H, ζ)
+	y = similar(ζ)
+    mul!(y, H, ζ)
 
-    @. g2 = g2 - g - ζ
+    @. g2 = g2 - g - y
 
     M_est = norm2(g2)/p_norm^2
 
