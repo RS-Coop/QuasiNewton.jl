@@ -126,9 +126,9 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     const max_depth::Int # maximum krylov depth
     const α₊::R # krylov depth increase factor
     const α₋::R # krylov depth reduction factor
+    const perturbation::Bool # add perturbation in negative eigenspace
     const levels::Int # recursion levels
     p::S # search direction
-    perturbation_flag::Bool
 end
 
 """
@@ -146,7 +146,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, α₊::R=1.5, α₋::R=2.0, levels::Int=1, perturbation_flag::Bool=false) where {R<:AbstractFloat}
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, α₊::R=1.5, α₋::R=2.0, perturbation::Bool=false, levels::Int=1) where {R<:AbstractFloat}
 
     if adapt
         min_depth, max_depth = min_depth, min(dim, max_depth)
@@ -154,7 +154,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, de
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, α₊, α₋, levels, type(undef, dim), perturbation_flag)
+    return LFASolver(depth, min_depth, max_depth, α₊, α₋, perturbation, levels, type(undef, dim))
 end
 
 """
@@ -208,14 +208,10 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     cache2 = similar(g, solver.depth)
 
     # Add perturbation
-    if solver.perturbation_flag
+    if solver.perturbation
         μ, i = findmin(E.values)
         if μ < 0 && 36*λ ≤ μ^2
-            if E.vectors[1,i] ≤ 0
-                @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], (2*abs(μ)/opt.M), 1.0)
-            else
-                @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -(2*abs(μ)/opt.M), 1.0)
-            end
+            @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 1.0)
         end
     end
 
@@ -383,9 +379,9 @@ Full eigendecomposition R-SFN search direction solver.
 - `cache::Vector`: Temporary memory.
 """
 mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
-    p::S # search direction
     cache::S # temporary memory
-    perturbation_flag::Bool
+    const perturbation::Bool # add perturbation in negative eigenspace
+    p::S # search direction
 end
 
 """
@@ -398,8 +394,8 @@ Constructor for `EigenSolver`.
 # Returns
 - `EigenSolver` instance.
 """
-function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, perturbation_flag::Bool=false)
-    return EigenSolver(type(undef, dim), type(undef, dim), perturbation_flag)
+function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, perturbation::Bool=false)
+    return EigenSolver(type(undef, dim), perturbation, type(undef, dim))
 end
 
 """
@@ -435,15 +431,11 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats,
     mul!(solver.p, E.vectors, solver.cache)
 
     # Add perturbation
-    if solver.perturbation_flag
+    if solver.perturbation
         μ, i = findmin(E.values)
         if μ < 0 && 36*λ ≤ μ^2
             @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-            if dot(solver.cache, g) ≤ 0 
-                solver.p .+= cache
-            else
-                solver.p .-= cache
-            end
+            solver.p .-= sign(dot(solver.cache, g))*cache
         end
     end
 
