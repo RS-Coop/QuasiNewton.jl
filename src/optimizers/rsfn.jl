@@ -10,7 +10,6 @@ include("lanczos.jl")
 # R-SFN Optimizer
 #########################################################
 
-
 """
 Regularized Saddle-Free Newton (R-SFN) optimizer.
 
@@ -178,6 +177,12 @@ Compute a single R-SFN step using `LFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
+    # Reset search direction
+    # This is necessary for the multi level update we are doing.
+    if level == 1
+        fill!(solver.p, zero(R))
+    end
+
     # Regularization
     λ = regularizer(opt, g_norm)
 
@@ -215,7 +220,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     end
 
     # Update search direction
-    @. E.values = pinv(sqrt(E.values^2+λ))
+    @. E.values = pinv(sqrt(E.values^2 + λ))
     s = pinv(sqrt(λ))
 
     @views @. cache1 = (E.values - s)*E.vectors[1,:]
@@ -280,6 +285,7 @@ mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:Abstrac
     block_size::Int # krylov block size
     Ω::M # block RHS
     p::S # search direction
+    enrichment_flag::Bool
 end
 
 """
@@ -294,12 +300,12 @@ Constructor for `BlockLFASolver`.
 # Returns
 - `BlockLFASolver` instance.
 """
-function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=floor(Int, log2(dim)), block_size::Int=2)
+function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=ceil(Int, log2(dim)), block_size::Int=2, enrichment_flag::Bool=false)
     if block_size > dim
         block_size = min(dim÷depth, block_size)
     end
 
-    return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim))
+    return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim), enrichment_flag)
 end
 
 """
@@ -327,7 +333,15 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     update_λ!(stats, λ)
 
     # Block Lanczos + eigendecomposition
-    solver.Ω[:,1] = g
+    @views solver.Ω[:,1] = g
+
+    # if solver.enrichment_flag
+    #     @views solver.Ω[:,2] = solver.p
+    # end
+
+    # Reset search direction
+    # NOTE: Leaving this in to add recursive updates at some point
+    fill!(solver.p, zero(R))
 
     block_depth = solver.block_size*solver.depth # total size i.e. "rank"
 
@@ -337,13 +351,15 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
 
     E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
 
-    # println(E.values)
+    if solver.enrichment_flag
+        @views mul!(solver.Ω[:,2:solver.block_size], Q, E.vectors[:,1:solver.block_size-1])
+    end
 
     # Update search direction
     cache1 = similar(g, block_depth)
     cache2 = similar(g, block_depth)
 
-    @. E.values = pinv(sqrt(E.values^2+λ))
+    @. E.values = pinv(sqrt(E.values^2 + λ))
     s = pinv(sqrt(λ))
 
     @views @. cache1 = (E.values - s)*E.vectors[1,:]

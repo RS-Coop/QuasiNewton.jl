@@ -109,7 +109,7 @@ function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalize::Bool=false) where
     B_i = zeros(R, b, b)
     B_ip1 = zeros(R, b, b)
 
-	if reorthogonalization
+	if reorthogonalize
 		ABtmp = zeros(R, b, b)
 	end
 

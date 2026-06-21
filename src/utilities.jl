@@ -115,12 +115,14 @@ function printstat(io, label, x)
 end
 
 #########################################################
+
 """
 Timer
 """
 elapsed(tic::UInt64) = (time_ns()-tic)/1e9
 
 #########################################################
+
 """
 Fast 2-norm with type conversion.
 """
