@@ -427,7 +427,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats,
 
     # Update search direction
     mul!(solver.cache, E.vectors', -g)
-    @. solver.cache *= pinv(sqrt(E.values^2+λ))
+    @. solver.cache *= pinv(sqrt(E.values^2 + λ))
     mul!(solver.p, E.vectors, solver.cache)
 
     # Add perturbation
