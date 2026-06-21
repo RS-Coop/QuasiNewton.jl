@@ -72,7 +72,6 @@ end
 
 #########################################################
 
-
 """
 Performs the core iteration loop to minimize a scalar function `f`.
 

@@ -172,9 +172,6 @@ Compute a single Newton step using `NewtonSolver`.
 - `stats` with iteration info.
 """
 function step!(opt::NewtonOptimizer, solver::NewtonSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-
-    # Reset search direction
-    fill!(solver.p, zero(R))
     
     # Regularization
     λ = regularizer(opt, g_norm)

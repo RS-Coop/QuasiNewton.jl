@@ -10,7 +10,6 @@ include("lanczos.jl")
 # R-SFN Optimizer
 #########################################################
 
-
 """
 Regularized Saddle-Free Newton (R-SFN) optimizer.
 
@@ -178,7 +177,10 @@ Compute a single R-SFN step using `LFASolver`.
 function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
     # Reset search direction
-    fill!(solver.p, zero(R))
+    # This is necessary for the multi level update we are doing.
+    if level == 1
+        fill!(solver.p, zero(R))
+    end
 
     # Regularization
     λ = regularizer(opt, g_norm)
@@ -205,7 +207,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     cache2 = similar(g, solver.depth)
 
     # Update search direction
-    @. E.values = pinv(sqrt(E.values^2+λ))
+    @. E.values = pinv(sqrt(E.values^2 + λ))
     s = pinv(sqrt(λ))
 
     @views @. cache1 = (E.values - s)*E.vectors[1,:]
@@ -325,6 +327,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     # end
 
     # Reset search direction
+    # NOTE: Leaving this in to add recursive updates at some point
     fill!(solver.p, zero(R))
 
     block_depth = solver.block_size*solver.depth # total size i.e. "rank"
@@ -334,11 +337,6 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     update_k!(stats, solver.depth)
 
     E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
-    # emax = maximum(E.values)
-    # emin = minimum(E.values)
-    # println(emax, emin)
-
-    # println(E.values)
 
     if solver.enrichment_flag
         @views mul!(solver.Ω[:,2:solver.block_size], Q, E.vectors[:,1:solver.block_size-1])
@@ -348,7 +346,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     cache1 = similar(g, block_depth)
     cache2 = similar(g, block_depth)
 
-    @. E.values = pinv(sqrt(E.values^2+λ))
+    @. E.values = pinv(sqrt(E.values^2 + λ))
     s = pinv(sqrt(λ))
 
     @views @. cache1 = (E.values - s)*E.vectors[1,:]
@@ -409,9 +407,6 @@ Compute a single R-SFN step using `EigenLFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
 
-    # Reset search direction
-    fill!(solver.p, zero(R))
-
     # Regularization
     λ = regularizer(opt, g_norm)
 
@@ -422,7 +417,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats,
 
     # Update search direction
     mul!(cache, E.vectors', -g)
-    @. cache *= pinv(sqrt(E.values^2+λ))
+    @. cache *= pinv(sqrt(E.values^2 + λ))
     mul!(solver.p, E.vectors, cache)
 
     return

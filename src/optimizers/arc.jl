@@ -150,9 +150,6 @@ Compute a single ARC step using `ARCSolver`.
 - `stats` with iteration info.
 """
 function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-    
-    # Reset search direction
-    fill!(solver.p, zero(R))
 
     # Tolerance
     ζ = 0.5
@@ -178,145 +175,6 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, stats::QuasiNewtonStats, H:
 
     return
 end
-
-#########################################################
-# Block Lanczos ARC Solver
-#########################################################
-
-mutable struct BlockARCSolver{S1, S2, M} <: QuasiNewtonSolver
-    const shifts::S1 # shifts
-    depth::Int # krylov depth
-    block_size::Int # krylov block size
-    Ω::M # block RHS
-    X::S2
-    p::S1 #search direction
-    enrichment_flag::Bool
-    idx_first::Int
-end
-
-function BlockARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, num_shifts::Int=61, depth::Int=floor(Int, log2(dim)), block_size::Int=2, enrichment_flag::Bool=true)
-
-    # Shifts
-    shifts = 10.0 .^ range(-10.0,20.0,length=num_shifts)
-
-    return BlockARCSolver(shifts, depth, block_size, randn(dim, block_size), [type(undef, dim) for _ in 1:num_shifts], type(undef, dim), enrichment_flag, 1)
-end
-
-function step!(opt::ARCOptimizer, solver::BlockARCSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-    
-    # Reset search direction
-    # fill!(solver.p, zero(R))
-
-    # Block Lanczos + eigendecomposition
-    solver.Ω[:,1] = g
-
-    if solver.enrichment_flag
-        solver.Ω[:,2] = solver.p
-    end
-
-    block_depth = solver.block_size*solver.depth # total size i.e. "rank"
-
-    Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalize=true)
-
-    update_k!(stats, solver.depth)
-
-    E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
-
-    Emin = minimum(E.values)
-    solver.idx_first = findfirst(s -> s > Emin, solver.shifts)
-
-    # Update search directions
-    tmp1 = similar(g, block_depth)
-    tmp2 = similar(g, block_depth)
-
-    v1 = @view E.vectors[1,:]
-
-    for i in solver.idx_first:length(solver.shifts)
-
-        σ = solver.shifts[i]
-
-        # tmp1 = (Λ + σI)^(-1) Vᵀ(B₁e₁)
-        @. tmp1 = (B1[1,1] * v1) / (E.values + σ)
-
-        # tmp2 = V * tmp1
-        mul!(tmp2, E.vectors, tmp1)
-
-        # p = -Q * tmp2
-        mul!(solver.X[i], Q, tmp2, -1.0, 0.0)
-    end
-
-	return
-end
-
-function search_bARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-    
-    # Cubic sub-problem
-    res = similar(g)
-    @inline cubic_subprob = (d) -> begin
-        mul!(res, H, d)
-        return fval + dot(g,d) + 0.5*dot(d, res)
-    end
-
-    status = false
-    shift_failure = false
-    M_new = opt.M
-    
-    i = opt.solver.idx_first
-
-    if i === nothing
-        return status
-    end
-
-    X = opt.solver.X
-
-    j = argmin(abs.(opt.M*opt.solver.shifts[i:end]-norm.(X[i:end]))) + i-1
-
-    while !status && !shift_failure
-        stats.f_evals += 1
-
-        ρ = (fval - f(x + X[j]))/(fval - cubic_subprob(X[j]))
-
-        # unsuccessful
-        if ρ < opt.η1
-            M_new = opt.M
-
-            while M_new > opt.γ1*opt.M
-                if j == length(opt.solver.shifts)
-                    stats.status = "No next shift"
-                    shift_failure = true
-                    break
-                end
-                M_new = norm2(X[j+1])/opt.solver.shifts[j+1]
-                j += 1
-            end
-            
-        # successful
-        else
-            status = true
-
-            update_λ!(stats, opt.solver.shifts[j])
-            # update_r!(stats, opt.solver.workspace.rNorms[j])
-
-            # step
-            opt.solver.p .= X[j]
-
-            # very successful
-            if ρ > opt.η2
-                M_new = opt.γ2*opt.M
-            else
-                M_new = opt.M
-            end
-        end
-    end
-
-    opt.M = min(M_new, R(1e16))
-
-    return status
-end
-
-#########################################################
-# ARC Search
-#########################################################
 
 """
 In-place ARC search direction update.
@@ -387,6 +245,142 @@ function search_ARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, fval::R, 
 
             update_λ!(stats, opt.solver.shifts[j])
             update_r!(stats, opt.solver.workspace.rNorms[j])
+
+            # step
+            opt.solver.p .= X[j]
+
+            # very successful
+            if ρ > opt.η2
+                M_new = opt.γ2*opt.M
+            else
+                M_new = opt.M
+            end
+        end
+    end
+
+    opt.M = min(M_new, R(1e16))
+
+    return status
+end
+
+#########################################################
+# Block Lanczos ARC Solver
+#########################################################
+
+mutable struct BlockARCSolver{S1, S2, M} <: QuasiNewtonSolver
+    const shifts::S1 # shifts
+    depth::Int # krylov depth
+    block_size::Int # krylov block size
+    Ω::M # block RHS
+    X::S2
+    p::S1 #search direction
+    enrichment_flag::Bool
+    idx_first::Int
+end
+
+function BlockARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, num_shifts::Int=61, depth::Int=floor(Int, log2(dim)), block_size::Int=2, enrichment_flag::Bool=true)
+
+    # Shifts
+    shifts = 10.0 .^ range(-10.0,20.0,length=num_shifts)
+
+    return BlockARCSolver(shifts, depth, block_size, randn(dim, block_size), [type(undef, dim) for _ in 1:num_shifts], type(undef, dim), enrichment_flag, 1)
+end
+
+function step!(opt::ARCOptimizer, solver::BlockARCSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+    # This isn't working/tested at the moment
+    throw(NotImplementedError())
+
+    # Block Lanczos + eigendecomposition
+    solver.Ω[:,1] = g
+
+    if solver.enrichment_flag
+        solver.Ω[:,2] = solver.p
+    end
+
+    block_depth = solver.block_size*solver.depth # total size i.e. "rank"
+
+    Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalize=true)
+
+    update_k!(stats, solver.depth)
+
+    E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
+
+    Emin = minimum(E.values)
+    solver.idx_first = findfirst(s -> s > Emin, solver.shifts)
+
+    # Update search directions
+    tmp1 = similar(g, block_depth)
+    tmp2 = similar(g, block_depth)
+
+    v1 = @view E.vectors[1,:]
+
+    for i in solver.idx_first:length(solver.shifts)
+
+        σ = solver.shifts[i]
+
+        # tmp1 = (Λ + σI)^(-1) Vᵀ(B₁e₁)
+        @. tmp1 = (B1[1,1] * v1) / (E.values + σ)
+
+        # tmp2 = V * tmp1
+        mul!(tmp2, E.vectors, tmp1)
+
+        # p = -Q * tmp2
+        mul!(solver.X[i], Q, tmp2, -1.0, 0.0)
+    end
+
+	return
+end
+
+function search_bARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+    # This isn't working/tested at the moment
+    throw(NotImplementedError())
+
+    # Cubic sub-problem
+    res = similar(g)
+    @inline cubic_subprob = (d) -> begin
+        mul!(res, H, d)
+        return fval + dot(g,d) + 0.5*dot(d, res)
+    end
+
+    status = false
+    shift_failure = false
+    M_new = opt.M
+    
+    i = opt.solver.idx_first
+
+    if i === nothing
+        return status
+    end
+
+    X = opt.solver.X
+
+    j = argmin(abs.(opt.M*opt.solver.shifts[i:end]-norm.(X[i:end]))) + i-1
+
+    while !status && !shift_failure
+        stats.f_evals += 1
+
+        ρ = (fval - f(x + X[j]))/(fval - cubic_subprob(X[j]))
+
+        # unsuccessful
+        if ρ < opt.η1
+            M_new = opt.M
+
+            while M_new > opt.γ1*opt.M
+                if j == length(opt.solver.shifts)
+                    stats.status = "No next shift"
+                    shift_failure = true
+                    break
+                end
+                M_new = norm2(X[j+1])/opt.solver.shifts[j+1]
+                j += 1
+            end
+            
+        # successful
+        else
+            status = true
+
+            update_λ!(stats, opt.solver.shifts[j])
+            # update_r!(stats, opt.solver.workspace.rNorms[j])
 
             # step
             opt.solver.p .= X[j]
