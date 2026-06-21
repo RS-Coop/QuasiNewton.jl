@@ -435,7 +435,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats,
         μ, i = findmin(E.values)
         if μ < 0 && 36*λ ≤ μ^2
             @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-            solver.p .-= sign(dot(solver.cache, g))*cache
+            solver.p .-= sign(dot(solver.cache, g))*solver.cache
         end
     end
 
