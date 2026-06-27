@@ -265,23 +265,32 @@ end
 
 """
 Hessian Lipschitz estimate.
+
+NOTE: This could be more efficient if we could do block computations (e.g., Hessian-Matrix products)
 """
-@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
+@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv; samples::Int=1) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
     h = eps(R)^(1/3)*max(one(R), norm(x))
+
+	M_est = zero(R)
+
+	for i=1:samples
     
-    ζ = randn(R, length(x))
-    normalize!(ζ)
-    
-    g2 = similar(x)
-    fg!(g2, @. x + h*ζ)
-    stats.g_evals += 1
+		ζ = randn(R, length(x))
+		normalize!(ζ)
+		
+		g2 = similar(x)
+		fg!(g2, @. x + h*ζ)
+		stats.g_evals += 1
 
-	y = similar(ζ)
-    mul!(y, H, ζ)
+		y = similar(ζ)
+		mul!(y, H, ζ)
 
-    @. g2 = g2 - g - h*y
+		@. g2 = g2 - g - h*y
 
-	M_est = norm2(g2)/h^2
+		M_est += norm2(g2)/h^2
+	end
+
+	M_est /= samples
 
     return isnan(M_est) ? 1e0 : min(2*M_est, 1e8)
 end

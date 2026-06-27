@@ -121,7 +121,8 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
     # Estimate regularization
     if isnan(opt.M)
-        M_est = estimate_M(stats, x, g, fg!, H)
+        M_est = estimate_M(stats, x, g, fg!, H; samples=10)
+        # M_est = estimate_M(stats, x, g, fg!, H, g, g_norm)
         opt.M = clamp(M_est, R(1e-8), R(1e8)/g_norm)
 
         # println("M Estimate: ", opt.M)
