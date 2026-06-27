@@ -189,7 +189,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     update_λ!(stats, λ)
 
     # Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, reorthogonalize=true)
+    Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, reorthogonalize=false)
 
     if level == solver.levels
         update_k!(stats, solver.depth)
@@ -280,8 +280,8 @@ mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:Abstrac
     depth::Int # krylov depth
     block_size::Int # krylov block size
     Ω::M # block RHS
+    const enrichment::Bool
     p::S # search direction
-    enrichment_flag::Bool
 end
 
 """
@@ -296,12 +296,12 @@ Constructor for `BlockLFASolver`.
 # Returns
 - `BlockLFASolver` instance.
 """
-function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=ceil(Int, log2(dim)), block_size::Int=2, enrichment_flag::Bool=false)
+function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=ceil(Int, log2(dim)), block_size::Int=2, enrichment::Bool=false)
     if block_size > dim
         block_size = min(dim÷depth, block_size)
     end
 
-    return BlockLFASolver(depth, block_size, randn(dim, block_size), type(undef, dim), enrichment_flag)
+    return BlockLFASolver(depth, block_size, randn(dim, block_size), enrichment, type(undef, dim))
 end
 
 """
@@ -331,7 +331,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     # Block Lanczos + eigendecomposition
     @views solver.Ω[:,1] = g
 
-    # if solver.enrichment_flag
+    # if solver.enrichment
     #     @views solver.Ω[:,2] = solver.p
     # end
 
@@ -347,7 +347,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
 
     E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
 
-    if solver.enrichment_flag
+    if solver.enrichment
         @views mul!(solver.Ω[:,2:solver.block_size], Q, E.vectors[:,1:solver.block_size-1])
     end
 
