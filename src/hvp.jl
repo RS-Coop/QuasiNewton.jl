@@ -302,7 +302,7 @@ end
 	ζ ./= p_norm
     
     g2 = similar(x)
-    fg!(g2, @. x + ζ)
+    fg!(g2, @. x + h*ζ)
     stats.g_evals += 1
 
 	y = similar(ζ)
