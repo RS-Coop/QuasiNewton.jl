@@ -109,7 +109,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
     
     # Stats
     stats = QuasiNewtonStats{R}(history)
-    converged = false
+    # converged = false
     iterations = 0
     
     # Gradient allocation
@@ -119,17 +119,20 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
     fval = fg!(g, x)
     g_norm = norm2(g)
 
+    # Tolerance
+    tol = opt.atol + opt.rtol*g_norm
+
+    # Initial check
+    g_norm ≤ tol ? converged = true : converged = false
+
     # Estimate regularization
-    if isnan(opt.M)
+    if !converged && isnan(opt.M)  # Avoid unnecessary computation
         M_est = estimate_M(stats, x, g, fg!, H; samples=10)
         # M_est = estimate_M(stats, x, g, fg!, H, g, g_norm)
         opt.M = clamp(M_est, R(1e-8), R(1e8)/g_norm)
 
         # println("M Estimate: ", opt.M)
     end
-
-    # Tolerance
-    tol = opt.atol + opt.rtol*g_norm
 
     # Initial stats
     update_f!(stats, fval)
@@ -139,10 +142,10 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
     setup!(opt, stats, x, fval, g, g_norm, f, fg!, H)
 
     # Iterate
-    while iterations ≤ max_iter
+    while !converged && iterations ≤ max_iter
 
         # Check gradient norm
-        if g_norm <= tol
+        if g_norm ≤ tol
             converged = true
             break
         end
