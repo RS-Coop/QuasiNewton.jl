@@ -15,19 +15,23 @@ Regularized Saddle-Free Newton (R-SFN) optimizer.
 
 # Fields
 - `solver::QuasiNewtonSolver`: Solver for computing the search direction.
-- `M::AbstractFloat`: Hessian regularization scaling.
+- `M::AbstractFloat`: local Hessian Lipschitz constant.
 - `linesearch!::Function`: Linesearch function.
 - `η::AbstractFloat`: Step size.
-- `α::AbstractFloat`: Linesearch reduction factor.
+- `M₊::AbstractFloat`: M increase factor.
+- `M₋::AbstractFloat`: M decrease factor.
+- `η₋::AbstractFloat`: η decrease factor.
 - `atol::AbstractFloat`: Absolute gradient tolerance.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
 mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F<:Function} <: QuasiNewtonOptimizer
     solver::Q # search direction solver
-    M::R # hessian regularization scaling
+    M::R # local Hessian Lipschitz constant
     const linesearch!::F # linesearch function
     const η::R # step-size
-    const α::R # linesearch reduction factor
+    const M₊::R # M increase factor
+    const M₋::R # M decrease factor
+    const η₋::R # η decrease factor
     const atol::R # absolute gradient norm tolerance
     const rtol::R # relative gradient norm tolerance
 end
@@ -41,7 +45,9 @@ Constructor for `RSFNOptimizer`.
 - `M::Float`: Hessian Lipschitz constant (default: `NaN` for auto-estimation).
 - `linesearch::Function`: Optional linesearch function (default: `search_η!`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
-- `α::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
+- `M₊::Float`: M increase factor in (1,∞) (default: `2.0`).
+- `M₋::Float`: M decrease factor in (0,1) (default: `0.25`).
+- `η₋::Float`: η decrease factor in (0,1) (default: `0.5`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
 - `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
 - `kwargs`: Keyword arguments passed to solver constructor.
@@ -49,23 +55,27 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
+    @assert 1<M₊ && 0<M₋ && M₋<1
 
     # Linesearch parameters
     if isnothing(linesearch)
         @assert 0<η && η≤1
         linesearch = (args...) -> return true
-    elseif iszero(M)
-        linesearch = backtrack!
+    else
+        @assert 0<η₋ && η₋<1
+        if iszero(M)
+            linesearch = backtrack!
+        end
     end
 
     # Solver
     solver_ = solver(dim; kwargs...)
 
-    return RSFNOptimizer(solver_, R2(M), linesearch, η, α, atol, rtol)
+    return RSFNOptimizer(solver_, R2(M), linesearch, η, M₊, M₋, η₋, atol, rtol)
 end
 
 """
@@ -117,6 +127,9 @@ Lanczos-based R-SFN search direction solver.
 - `depth::Int`: Krylov depth.
 - `min_depth::Int`: Minimum Krylov depth.
 - `max_depth::Int`: Maximum Krylov depth.
+- `inc_depth::Int`: Krylov depth increase factor.
+- `dec_depth::Int`: Krylov depth decrease factor.
+- `perturbation::Bool`: Whether to add perturbation.
 - `levels::Int`: Recursion levels.
 - `p::Vector`: Search direction.
 """
@@ -124,8 +137,8 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     depth::Int # krylov depth
     const min_depth::Int # minimum krylov depth
     const max_depth::Int # maximum krylov depth
-    const α₊::R # krylov depth increase factor
-    const α₋::R # krylov depth reduction factor
+    const inc_depth::R # krylov depth increase factor
+    const dec_depth::R # krylov depth reduction factor
     const perturbation::Bool # add perturbation in negative eigenspace
     const levels::Int # recursion levels
     p::S # search direction
@@ -141,20 +154,26 @@ Constructor for `LFASolver`.
 - `adapt::Bool`: Whether to adapt Krylov depth dynamically (default: `true`).
 - `min_depth::Int`: Minimum Krylov depth if `adapt=true` (default: `2`).
 - `max_depth::Int`: Maximum Krylov depth if `adapt=true` (default: `1000`).
+- `inc_depth::Int`: Krylov depth increase factor (default: `1.5`).
+- `dec_depth::Int`: Krylov depth decrease factor (default: `0.5`).
+- `perturbation::Bool`: Whether to add perturbation (default: `true`).
 - `levels::Int`: Number of recursion levels for multi-level Lanczos (default: `1`).
 
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, α₊::R=1.5, α₋::R=2.0, perturbation::Bool=false, levels::Int=1) where {R<:AbstractFloat}
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, inc_depth::R=1.5, dec_depth::R=0.5, perturbation::Bool=true, levels::Int=1) where {R<:AbstractFloat}
+
+    @assert 1≤depth && depth≤dim
 
     if adapt
-        min_depth, max_depth = min_depth, min(dim, max_depth)
+        @assert 1≤min_depth && min_depth≤max_depth && max_depth≤dim
+        @assert 1<inc_depth && 0<dec_depth && dec_depth<1
     else
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, α₊, α₋, perturbation, levels, type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, perturbation, levels, type(undef, dim))
 end
 
 """
@@ -247,9 +266,9 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
     # Depth change
     if solver.min_depth != solver.max_depth
         if r_norm ≥ tol && level == 1
-            solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.α₊))
+            solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.inc_depth))
         elseif r_norm ≤ R(1e-2)*tol && level == solver.levels
-            solver.depth = max(solver.min_depth, div(solver.depth, solver.α₋))
+            solver.depth = max(solver.min_depth, floor(Int, solver.depth*solver.dec_depth))
         end
     end
 

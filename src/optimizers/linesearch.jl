@@ -69,7 +69,7 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
     if !iszero(opt.M)
         M_est =
             if isone(η)
-                opt.M*opt.α
+                opt.M*opt.M₋
             else
                 η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, norm2(p))
             end
@@ -119,9 +119,9 @@ function search_M!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm:
     dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     if p_norm ≥ sqrt(eps(R)) && f(x+p)-fval ≤ dec # success
-        opt.M = clamp(R(opt.M)*opt.α, R(1e-8), R(1e8)) # decrease regularization
+        opt.M = clamp(R(opt.M)*opt.M₋, R(1e-8), R(1e8)) # decrease regularization
     else # failure
-        opt.M = clamp(R(opt.M)/opt.α, R(1e-8), R(1e8)) # increase regularization
+        opt.M = clamp(R(opt.M)*opt.M₊, R(1e-8), R(1e8)) # increase regularization
 
         p .= zero(R)
 
@@ -190,13 +190,11 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
             # M_est = estimate_M(stats, x, g, fg!, H, p, p_norm)
             M_est =
                 if isone(η)
-                    # α = 1 - clamp(p_norm / (1 + p_norm), 0.1, 0.9)
-                    # opt.M*α
-                    opt.M*opt.α
+                    opt.M*opt.M₋ # decrease regularization
+                elseif η ≥ 0.25
+                    opt.M*opt.M₊ # increase regularization
                 else
                     η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, p_norm)
-                    # η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H; samples=1)
-                    # estimate_M(stats, x, g, fg!, H; samples=1)
                 end
 
             opt.M = clamp(M_est, R(1e-8), R(1e8))
@@ -205,10 +203,10 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
             break
         else
-            η *= opt.α # reduce step-size
-            p .*= opt.α # scale search direction
-            p_norm *= opt.α # scale norm
-            dec *= opt.α^2 # scale decrement
+            η *= opt.η₋ # decrease step-size
+            p .*= opt.η₋ # scale search direction
+            p_norm *= opt.η₋ # scale norm
+            dec *= opt.η₋^2 # scale decrement
         end
 
         # Check step-size
