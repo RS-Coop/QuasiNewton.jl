@@ -256,14 +256,14 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
         end
     end
 
-    # Stats
-    update_λ!(stats, regularizer(opt, obj.g_norm))
-    update_r!(stats, r_norm)
-
     # Update
     if status
         x .+= opt.η*solver.p
     end
+
+    # Stats
+    update_λ!(stats, regularizer(opt, obj.g_norm))
+    update_r!(stats, r_norm)
 
     return status
 end
@@ -327,21 +327,8 @@ Compute a single R-SFN step using `BlockLFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
-    # Regularization
-    λ = regularizer(opt, obj.g_norm)
-
-    update_λ!(stats, λ)
-
     # Block Lanczos + eigendecomposition
     @views solver.Ω[:,1] = obj.g
-
-    # if solver.enrichment
-    #     @views solver.Ω[:,2] = solver.p
-    # end
-
-    # Reset search direction
-    # NOTE: Leaving this in to add recursive updates at some point
-    fill!(solver.p, zero(R))
 
     block_depth = solver.block_size*solver.depth # total size i.e. "rank"
 
@@ -359,15 +346,22 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     cache1 = similar(obj.g, block_depth)
     cache2 = similar(obj.g, block_depth)
 
-    @. E.values = pinv(sqrt(E.values^2 + λ))
-    s = pinv(sqrt(λ))
+    function p!()
+        # Regularization
+        λ = regularizer(opt, obj.g_norm)
 
-    @views @. cache1 = (E.values - s)*E.vectors[1,:]
-    mul!(cache2, E.vectors, cache1)
+        @. E.values = pinv(sqrt(E.values^2 + λ))
+        s = pinv(sqrt(λ))
 
-    @views mul!(solver.p, Q, cache2, -B1[1,1], 1.)
-    solver.p .-= s*obj.g
+        @views @. cache1 = (E.values - s)*E.vectors[1,:]
+        mul!(cache2, E.vectors, cache1)
 
+        @views mul!(solver.p, Q, cache2, -B1[1,1], 1.)
+        solver.p .-= s*obj.g
+
+        return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
+    end
+    
     # Linesearch
     status = opt.linesearch!(opt, x, obj, stats)
 
@@ -375,6 +369,9 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     if status
         x .+= opt.η*solver.p
     end
+
+    # Stats
+    update_λ!(stats, λ)
 
     return status
 end
@@ -456,13 +453,13 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     # Linesearch
     status = opt.linesearch!(opt, x, obj, stats)
 
-    # Stats
-    update_λ!(stats, regularizer(opt, obj.g_norm))
-
     # Update
     if status
         x .+= opt.η*solver.p
     end
+
+    # Stats
+    update_λ!(stats, regularizer(opt, obj.g_norm))
 
     return status
 end
@@ -534,6 +531,7 @@ Perform an in-place step-size line search.
 - `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
 """
 function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+    throw(ErrorException("Not currently implemented"))
 
     # Setup
     p = opt.solver.p
