@@ -74,7 +74,7 @@ function backtrack!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
                 # opt.M*opt.M₊ # increase regularization
                 opt.M/η^2
             else
-                η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, norm2(p))
+                η*opt.M + (1-η)*estimate_M(stats, x, g, fg!, H, p, twonorm(p))
             end
 
         opt.M = clamp(M_est, R(1e-8), R(1e8))
@@ -114,7 +114,7 @@ function search_M!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm:
 
     # Setup
     p = opt.solver.p
-    p_norm = norm2(p)
+    p_norm = twonorm(p)
     status = true
     λ = regularizer(opt, g_norm)
 
@@ -165,7 +165,7 @@ function search_η!(opt::O, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm
 
     # Setup
     p = opt.solver.p
-    p_norm = norm2(p)
+    p_norm = twonorm(p)
     status = true
     λ = regularizer(opt, g_norm)
     

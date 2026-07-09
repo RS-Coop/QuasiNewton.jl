@@ -235,7 +235,7 @@ function search_ARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, fval::R, 
                     shift_failure = true
                     break
                 end
-                M_new = norm2(X[j+1])/opt.solver.shifts[j+1]
+                M_new = twonorm(X[j+1])/opt.solver.shifts[j+1]
                 j += 1
             end
             
@@ -371,7 +371,7 @@ function search_bARC!(opt::ARCOptimizer, stats::QuasiNewtonStats, x::S, fval::R,
                     shift_failure = true
                     break
                 end
-                M_new = norm2(X[j+1])/opt.solver.shifts[j+1]
+                M_new = twonorm(X[j+1])/opt.solver.shifts[j+1]
                 j += 1
             end
             

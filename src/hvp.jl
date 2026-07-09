@@ -287,7 +287,7 @@ NOTE: This could be more efficient if we could do block computations (e.g., Hess
 
 		@. g2 = g2 - g - h*y
 
-		M_est += norm2(g2)/h^2
+		M_est += twonorm(g2)/h^2
 	end
 
 	M_est /= samples
@@ -295,7 +295,7 @@ NOTE: This could be more efficient if we could do block computations (e.g., Hess
     return isnan(M_est) ? 1e0 : min(2*M_est, 1e8)
 end
 
-@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv, p::S, p_norm::R=norm2(p)) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
+@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv, p::S, p_norm::R=twonorm(p)) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
     h = eps(R)^(1/3)*max(one(R), norm(x))
 
 	ζ = copy(p)
@@ -310,7 +310,7 @@ end
 
     @. g2 = g2 - g - h*y
 
-    M_est = norm2(g2)/h^2
+    M_est = twonorm(g2)/h^2
 
 	return isnan(M_est) ? 1e0 : min(2*M_est, 1e8)
 end

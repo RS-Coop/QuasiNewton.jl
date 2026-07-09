@@ -117,7 +117,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
     # Compute function and gradient
     fval = fg!(g, x)
-    g_norm = norm2(g)
+    g_norm = twonorm(g)
 
     # Tolerance
     tol = opt.atol + opt.rtol*g_norm
@@ -177,7 +177,7 @@ function iterate!(opt::O, x::S, f::F1, fg!::F2, H::Hv, max_iter::Int, max_time::
 
         # Update function and gradient
         fval = fg!(g, x)
-        g_norm = norm2(g)
+        g_norm = twonorm(g)
 
         # Update stats
         update_f!(stats, fval)

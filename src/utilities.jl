@@ -126,7 +126,7 @@ elapsed(tic::UInt64) = (time_ns()-tic)/1e9
 """
 Fast 2-norm with type conversion.
 """
-@inline function norm2(x::AbstractVector{R}) where {R}
+@inline function twonorm(x::AbstractVector{R}) where {R}
     y = dot(x, x)
     return convert(R, sqrt(y))
 end

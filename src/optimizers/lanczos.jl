@@ -31,7 +31,7 @@ function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:
 		qᵢ₊₁ = q = view(Q,:,i+1)
 
 		if i == 1
-            β₁ = norm2(ω)
+            β₁ = twonorm(ω)
 			if β₁ == 0
 				error("Exact breakdown β₁ == 0.")
 			else
@@ -66,7 +66,7 @@ function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:
 		end
 
 		d[i] = αᵢ
-		βᵢ₊₁ = norm2(q)
+		βᵢ₊₁ = twonorm(q)
 
 		if βᵢ₊₁ ≤ eps(R)
 			# error("Breakdown βᵢ₊₁ ≤ eps at iteration i = $i.")
