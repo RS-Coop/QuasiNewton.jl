@@ -19,6 +19,7 @@ module QuasiNewton
 
 	include("utilities.jl")
 	include("hvp.jl")
+	iclude("objective.jl")
 	include("optimizers/optimizers.jl")
 	include("minimize.jl")
 
@@ -59,8 +60,9 @@ module QuasiNewton
 	"""
 	function minimize!(x::S, f::F, optimizer::Val{optimizer_}, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F<:Function, optimizer_, T}
 		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
+		obj = Objective(x, f, ad_backend)
 		
-		return minimize!(opt, x, f, ad_backend; max_iter=max_iter, max_time=max_time, history=history)
+		return minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 	end
 
 	"""
@@ -85,8 +87,9 @@ module QuasiNewton
 	"""
 	function minimize!(x::S, f::F1, fg!::F2, H::L, optimizer::Val{optimizer_}; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, L, optimizer_, T}
 		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
+		obj = Objective(x, f, fg!, H)
 		
-		return minimize!(opt, x, f, fg!, H; max_iter=max_iter, max_time=max_time, history=history)
+		return minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 	end
 
 	#########################################################

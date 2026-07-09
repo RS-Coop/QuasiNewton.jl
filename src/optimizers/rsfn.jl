@@ -55,7 +55,7 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_M!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -82,15 +82,10 @@ end
 Perform setup operations before beginning optimization process.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer
-- `stats::QuasiNewtonStats`: Optimization Statistics
+- `opt::RSFNOptimizer`: Optimizer instance.
 - `x::S`: Current iterate.
-- `f::F1`: Objective function.
-- `fg!::F2`: In-place gradient function.
-- `fval::R`: Current function value at `x`.
-- `g::S`: Gradient vector at `x`.
-- `g_norm::R`: Gradient norm
-- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+- `obj::Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization Statistics
 
 # Updates
 - `opt`
@@ -98,7 +93,7 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::RSFNOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+@inline function setup!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     return nothing
 end
 
@@ -129,8 +124,7 @@ Lanczos-based R-SFN search direction solver.
 - `max_depth::Int`: Maximum Krylov depth.
 - `inc_depth::Int`: Krylov depth increase factor.
 - `dec_depth::Int`: Krylov depth decrease factor.
-- `perturbation::Bool`: Whether to add perturbation.
-- `levels::Int`: Recursion levels.
+- `eigenstep::Bool`: Whether to add eigenstep.
 - `p::Vector`: Search direction.
 """
 mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewtonSolver
@@ -139,8 +133,7 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     const max_depth::Int # maximum krylov depth
     const inc_depth::R # krylov depth increase factor
     const dec_depth::R # krylov depth reduction factor
-    const perturbation::Bool # add perturbation in negative eigenspace
-    const levels::Int # recursion levels
+    const eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
 end
 
@@ -156,13 +149,12 @@ Constructor for `LFASolver`.
 - `max_depth::Int`: Maximum Krylov depth if `adapt=true` (default: `1000`).
 - `inc_depth::Int`: Krylov depth increase factor (default: `1.5`).
 - `dec_depth::Int`: Krylov depth decrease factor (default: `0.5`).
-- `perturbation::Bool`: Whether to add perturbation (default: `true`).
-- `levels::Int`: Number of recursion levels for multi-level Lanczos (default: `1`).
+- `eigenstep::Bool`: Whether to add eigenstep (default: `true`).
 
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, inc_depth::R=1.5, dec_depth::R=0.5, perturbation::Bool=true, levels::Int=1) where {R<:AbstractFloat}
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, inc_depth::R=1.5, dec_depth::R=0.5, eigenstep::Bool=true) where {R<:AbstractFloat}
 
     @assert 1≤depth && depth≤dim
 
@@ -173,7 +165,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, de
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, perturbation, levels, type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, dim))
 end
 
 """
@@ -182,73 +174,65 @@ Compute a single R-SFN step using `LFASolver`.
 # Arguments
 - `opt::RSFNOptimizer`: Optimizer.
 - `solver::LFASolver`: Solver instance.
+- `x::S`: Current iterate.
+- `obj:Objective`: Objective function instance.
 - `stats::QuasiNewtonStats`: Optimization statistics.
-- `H::HvpOperator`: Hessian operator.
-- `g::Vector`: Gradient.
-- `g_norm::Real`: Gradient norm.
-- `level::Int`: Current recursion level (default: solver.levels).
 - `tol::Real`: Step tolerance (optional).
 - `max_time::Real`: Maximum allowed time (optional).
 
 # Updates
-- `solver.p` with computed search directions.
+- `x` updated iterate.
 - `stats` with iteration info.
 """
-function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; level::Int=solver.levels, tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
-
-    # Reset search direction
-    # This is necessary for the multi level update we are doing.
-    if level == 1
-        fill!(solver.p, zero(R))
-    end
-
-    # Regularization
-    λ = regularizer(opt, g_norm)
-
-    update_λ!(stats, λ)
+function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(H, g, solver.depth, reorthogonalize=false)
+    Q, T, βₖ₊₁ = lanczos(obj.H, obj.g, solver.depth, reorthogonalize=false)
 
-    if level == solver.levels
-        update_k!(stats, solver.depth)
-    elseif stats.history
-        stats.k_seq[end] += solver.depth
-    end
+    update_k!(stats, solver.depth)
 
     # Symmetric tridgiagonal eigendecomposition
-    # NOTE: stegr might be faster but is prone to errors
-    # E = eigen(T)
-    # E = Eigen(LAPACK.stegr!('V', T.dv, T.ev)...)
     E = Eigen(LAPACK.stev!('V', T.dv, T.ev)...)
 
     # Temporary memory, NOTE: Can you get away with just one of these?
-    cache1 = similar(g, solver.depth)
-    cache2 = similar(g, solver.depth)
+    cache1 = similar(obj.g, solver.depth)
+    cache2 = similar(obj.g, solver.depth)
 
-    # Add perturbation
-    if solver.perturbation
-        μ, i = findmin(E.values)
-        if μ < 0 && 36*λ ≤ μ^2
-            @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 1.0)
+    function p!()
+        # Negative eigenstep
+        if solver.eigenstep
+            μ, i = findmin(E.values)
+
+            if μ < 0 && obj.g_norm ≤ μ^2/opt.M
+                @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 1.0)
+                return -(2/3)*μ^3/opt.M^2
+            end
         end
+        
+        # Regularization
+        λ = regularizer(opt, obj.g_norm)
+
+        # Update search direction
+        @. E.values = pinv(sqrt(E.values^2 + λ))
+        s = pinv(sqrt(λ))
+
+        @views @. cache1 = (E.values - s)*E.vectors[1,:]
+        mul!(cache2, E.vectors, cache1)
+
+        @views mul!(solver.p, Q[:,1:solver.depth], cache2, -obj.g_norm, 1.)
+        solver.p .-= s*obj.g
+        
+        return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
     end
 
-    # Update search direction
-    @. E.values = pinv(sqrt(E.values^2 + λ))
-    s = pinv(sqrt(λ))
-
-    @views @. cache1 = (E.values - s)*E.vectors[1,:]
-    mul!(cache2, E.vectors, cache1)
-
-    @views mul!(solver.p, Q[:,1:solver.depth], cache2, -g_norm, 1.)
-    solver.p .-= s*g
+    # Linesearch
+    status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Compute residual
     @views @. cache1 = E.values*E.vectors[1,:]
     z = dot(E.vectors[solver.depth,:], cache1)
 
-    r_norm = g_norm*βₖ₊₁*z # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
+    r_norm = obj.g_norm*βₖ₊₁*z # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
     @views r = r_norm*Q[:,solver.depth+1]
     r_norm = abs(r_norm)
 
@@ -257,29 +241,31 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, stats::QuasiNewtonStats, H
         ζ = 0.5
         ξ = R(0.01)
 
-        atol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(1+ζ)))
-        rtol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(ζ)))
+        atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
+        rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
 
-        tol = atol + g_norm*rtol
+        tol = atol + obj.g_norm*rtol
     end
     
     # Depth change
     if solver.min_depth != solver.max_depth
-        if r_norm ≥ tol && level == 1
+        if r_norm ≥ tol
             solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.inc_depth))
-        elseif r_norm ≤ R(1e-2)*tol && level == solver.levels
+        elseif r_norm ≤ R(1e-2)*tol
             solver.depth = max(solver.min_depth, floor(Int, solver.depth*solver.dec_depth))
         end
     end
 
-    # Recurse
-    if level > 1 && r_norm ≥ tol
-        step!(opt, solver, stats, H, r, r_norm; level=level-1, tol=tol, max_time=max_time)
-    else
-        update_r!(stats, r_norm)
+    # Stats
+    update_λ!(stats, regularizer(opt, obj.g_norm))
+    update_r!(stats, r_norm)
+
+    # Update
+    if status
+        x .+= opt.η*solver.p
     end
 
-    return
+    return status
 end
 
 #########################################################
@@ -329,26 +315,25 @@ Compute a single R-SFN step using `BlockLFASolver`.
 # Arguments
 - `opt::RSFNOptimizer`: Optimizer.
 - `solver::BlockLFASolver`: Solver instance.
+- `x::S`: Current iterate.
+- `obj:Objective`: Objective function instance.
 - `stats::QuasiNewtonStats`: Optimization statistics.
-- `H::HvpOperator`: Hessian operator.
-- `g::Vector`: Gradient.
-- `g_norm::Real`: Gradient norm.
 - `tol::Real`: Step tolerance (optional).
 - `max_time::Real`: Maximum allowed time (optional).
 
 # Updates
-- `solver.p` with computed search directions.
+- `x` updated iterate.
 - `stats` with iteration info.
 """
-function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Regularization
-    λ = regularizer(opt, g_norm)
+    λ = regularizer(opt, obj.g_norm)
 
     update_λ!(stats, λ)
 
     # Block Lanczos + eigendecomposition
-    @views solver.Ω[:,1] = g
+    @views solver.Ω[:,1] = obj.g
 
     # if solver.enrichment
     #     @views solver.Ω[:,2] = solver.p
@@ -360,7 +345,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
 
     block_depth = solver.block_size*solver.depth # total size i.e. "rank"
 
-    Q, T, B1 = block_lanczos(H, solver.Ω, solver.depth; reorthogonalize=true)
+    Q, T, B1 = block_lanczos(obj.H, solver.Ω, solver.depth; reorthogonalize=true)
 
     update_k!(stats, solver.depth)
 
@@ -371,8 +356,8 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     end
 
     # Update search direction
-    cache1 = similar(g, block_depth)
-    cache2 = similar(g, block_depth)
+    cache1 = similar(obj.g, block_depth)
+    cache2 = similar(obj.g, block_depth)
 
     @. E.values = pinv(sqrt(E.values^2 + λ))
     s = pinv(sqrt(λ))
@@ -381,9 +366,17 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, stats::QuasiNewtonSta
     mul!(cache2, E.vectors, cache1)
 
     @views mul!(solver.p, Q, cache2, -B1[1,1], 1.)
-    solver.p .-= s*g
+    solver.p .-= s*obj.g
 
-	return
+    # Linesearch
+    status = opt.linesearch!(opt, x, obj, stats)
+
+    # Update
+    if status
+        x .+= opt.η*solver.p
+    end
+
+    return status
 end
 
 #########################################################
@@ -399,7 +392,7 @@ Full eigendecomposition R-SFN search direction solver.
 """
 mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
     cache::S # temporary memory
-    const perturbation::Bool # add perturbation in negative eigenspace
+    const eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
 end
 
@@ -413,50 +406,190 @@ Constructor for `EigenSolver`.
 # Returns
 - `EigenSolver` instance.
 """
-function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, perturbation::Bool=false)
-    return EigenSolver(type(undef, dim), perturbation, type(undef, dim))
+function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, eigenstep::Bool=false)
+    return EigenSolver(type(undef, dim), eigenstep, type(undef, dim))
 end
 
 """
-Compute a single R-SFN step using `EigenLFASolver`.
+Compute a single R-SFN step using `EigenSolver`.
 
 # Arguments
 - `opt::RSFNOptimizer`: Optimizer.
-- `solver::BlockLFASolver`: Solver instance.
+- `solver::EigenSolver`: Solver instance.
+- `x::S`: Current iterate.
+- `obj:Objective`: Objective function instance.
 - `stats::QuasiNewtonStats`: Optimization statistics.
-- `H::HvpOperator`: Hessian operator.
-- `g::Vector`: Gradient.
-- `g_norm::Real`: Gradient norm.
-- `tol::Real`: Step tolerance (optional).
 - `max_time::Real`: Maximum allowed time (optional).
 
 # Updates
-- `solver.p` with computed search directions.
+- `x` updated iterate.
 - `stats` with iteration info.
 """
-function step!(opt::RSFNOptimizer, solver::EigenSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
-    # Regularization
-    λ = regularizer(opt, g_norm)
-
-    update_λ!(stats, λ)
-    
     # Eigendecomposition
-    E = eigen!(Matrix(H))
+    E = eigen!(Matrix(obj.H))
 
-    # Update search direction
-    mul!(solver.cache, E.vectors', -g)
-    @. solver.cache *= pinv(sqrt(E.values^2 + λ))
-    mul!(solver.p, E.vectors, solver.cache)
+    function p!()
+        # Negative eigenstep
+        if solver.eigenstep
+            μ, i = findmin(E.values)
 
-    # Add perturbation
-    if solver.perturbation
-        μ, i = findmin(E.values)
-        if μ < 0 && 36*λ ≤ μ^2
-            @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-            solver.p .-= sign(dot(solver.cache, g))*solver.cache
+            if μ < 0 && obj.g_norm ≤ μ^2/opt.M
+                @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
+                solver.p .-= sign(dot(solver.cache, obj.g))*solver.cache
+                return -(2/3)*μ^3/opt.M^2
+            end
+        end
+
+        # Regularization
+        λ = regularizer(opt, obj.g_norm)
+
+        # Update search direction
+        mul!(solver.cache, E.vectors', -obj.g)
+        @. solver.cache *= pinv(sqrt(E.values^2 + λ))
+        mul!(solver.p, E.vectors, solver.cache)
+
+        return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
+    end
+
+    # Linesearch
+    status = opt.linesearch!(opt, x, obj, stats)
+
+    # Stats
+    update_λ!(stats, regularizer(opt, obj.g_norm))
+
+    # Update
+    if status
+        x .+= opt.η*solver.p
+    end
+
+    return status
+end
+
+#########################################################
+# Backtracking regularization/stepsize linesearch
+#########################################################
+
+"""
+Perform an in-place regularization-based line search.
+
+# Arguments
+- `opt::RSFNOptimizer`: Optimizer instance.
+- `x::S`: Current iterate.
+- `p::F`: Step function.
+- `obj:Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+
+# Updates
+- `opt.solver.p` with scaled search direction.
+- `opt.M` with updated regularization.
+
+# Returns
+- `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
+"""
+function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+
+    # Setup
+    status = true
+
+    # Backtracking loop
+    while status
+        dec = p!()
+
+        # NOTE: Do we need this
+        if dec ≤ eps(R)
+            status = false
+            break
+        end
+
+        stats.f_evals += 1
+
+        if obj.f(x + solver.p) - obj.fval ≤ dec
+            opt.M = clamp(R(opt.M)*opt.M₋, R(1e-8), R(1e8)) # decrease regularization
+            break
+        else
+            opt.M = clamp(R(opt.M)*opt.M₊, R(1e-8), R(1e8)) # increase regularization
         end
     end
 
-    return
+    return status
+end
+
+"""
+Perform an in-place step-size line search.
+
+# Arguments
+- `opt::RSFNOptimizer`: Optimizer instance.
+- `x::S`: Current iterate.
+- `p::F`: Step function.
+- `obj:Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+
+# Updates
+- `opt.solver.p` with scaled search direction.
+- `opt.M` with updated regularization.
+
+# Returns
+- `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
+"""
+function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+
+    # Setup
+    p = opt.solver.p
+    p_norm = twonorm(p)
+    status = true
+    λ = regularizer(opt, g_norm)
+    
+    # Increase step-size
+    η = 1.0
+
+    # Scale search direction and norm
+    p .*= η
+    p_norm *= η 
+    
+    # Target decrement
+    dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
+
+    # Check search direction
+    if p_norm < sqrt(eps(R))
+        status = false
+    end
+
+    # NOTE: Can we just iteratively update x, is that even that much better?
+    while status
+        stats.f_evals += 1
+
+        if obj.f(x+p) - obj.fval ≤ dec
+            # Update regularization
+            M_est =
+                if isone(η)
+                    opt.M*opt.M₋ # decrease regularization
+                elseif η ≥ 0.1
+                    # opt.M*opt.M₊ # increase regularization
+                    opt.M/η^2
+                else
+                    η*opt.M + (1-η)*estimate_M(stats, x, obj.g, obj.fg!, obj.H, p, p_norm) # re-estimate regularization
+                end
+
+            opt.M = clamp(M_est, R(1e-8), R(1e8))
+
+            # println("M Estimate: ", opt.M)
+
+            break
+        else
+            η *= opt.η₋ # decrease step-size
+            p .*= opt.η₋ # scale search direction
+            p_norm *= opt.η₋ # scale norm
+            dec *= opt.η₋^2 # scale decrement
+        end
+
+        # Check step-size
+        if η < sqrt(eps(R))
+            status = false
+        end
+    end
+
+    # Fallback to basic backtracking if linesearch failed
+    return status #|| backtrack!(opt, x, obj, stats)
 end

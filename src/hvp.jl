@@ -268,7 +268,7 @@ Hessian Lipschitz estimate.
 
 NOTE: This could be more efficient if we could do block computations (e.g., Hessian-Matrix products)
 """
-@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv; samples::Int=1) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
+@inline function estimate_M(x::S, obj::Objective, stats::QuasiNewtonStats; samples::Int=1) where {R<:AbstractFloat, S<:AbstractVector{R}}
     h = eps(R)^(1/3)*max(one(R), norm(x))
 
 	M_est = zero(R)
@@ -279,11 +279,11 @@ NOTE: This could be more efficient if we could do block computations (e.g., Hess
 		normalize!(ζ)
 		
 		g2 = similar(x)
-		fg!(g2, @. x + h*ζ)
+		obj.fg!(g2, @. x + h*ζ)
 		stats.g_evals += 1
 
 		y = similar(ζ)
-		mul!(y, H, ζ)
+		mul!(y, obj.H, ζ)
 
 		@. g2 = g2 - g - h*y
 
@@ -295,18 +295,18 @@ NOTE: This could be more efficient if we could do block computations (e.g., Hess
     return isnan(M_est) ? 1e0 : min(2*M_est, 1e8)
 end
 
-@inline function estimate_M(stats::QuasiNewtonStats, x::S, g::S, fg!::F, H::Hv, p::S, p_norm::R=twonorm(p)) where {R<:AbstractFloat, S<:AbstractVector{R}, F, Hv<:HvpOperator}
+@inline function estimate_M(x::S, obj::Objective, p::S, p_norm::R=twonorm(p), stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     h = eps(R)^(1/3)*max(one(R), norm(x))
 
 	ζ = copy(p)
 	ζ ./= p_norm
     
     g2 = similar(x)
-    fg!(g2, @. x + h*ζ)
+    obj.fg!(g2, @. x + h*ζ)
     stats.g_evals += 1
 
 	y = similar(ζ)
-    mul!(y, H, ζ)
+    mul!(y, obj.H, ζ)
 
     @. g2 = g2 - g - h*y
 

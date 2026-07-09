@@ -10,4 +10,3 @@ abstract type QuasiNewtonSolver end
 include("arc.jl")
 include("newton.jl")
 include("rsfn.jl")
-include("linesearch.jl")

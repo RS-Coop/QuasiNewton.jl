@@ -4,6 +4,8 @@ Author: Cooper Simpson
 (Regularized/Damped) Newton.
 =#
 
+using LineSearches: BackTracking
+
 #########################################################
 # Newton Optimizer
 #########################################################
@@ -68,15 +70,10 @@ end
 Perform setup operations before beginning optimization process.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer
-- `stats::QuasiNewtonStats`: Optimization Statistics
+- `opt::NewtonOptimizer`: Optimizer instance.
 - `x::S`: Current iterate.
-- `f::F1`: Objective function.
-- `fg!::F2`: In-place gradient function.
-- `fval::R`: Current function value at `x`.
-- `g::S`: Gradient vector at `x`.
-- `g_norm::R`: Gradient norm
-- `H::Hv`: Hessian-vector product operator (optional for some solvers).
+- `obj:Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization Statistics
 
 # Updates
 - `opt`
@@ -84,7 +81,7 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::NewtonOptimizer, stats::QuasiNewtonStats, x::S, fval::R, g::S, g_norm::R, f::F1, fg!::F2, H::Hv) where {F1<:Function, F2<:Function, R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+@inline function setup!(opt::NewtonOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     return nothing
 end
 
@@ -160,21 +157,19 @@ Compute a single Newton step using `NewtonSolver`.
 # Arguments
 - `opt::NewtonOptimizer`: Optimizer.
 - `solver::NewtonSolver`: Solver instance.
+- `x::S`: Current iterate.
+- `obj:Objective`: Objective function instance.
 - `stats::QuasiNewtonStats`: Optimization statistics.
-- `H::HvpOperator`: Hessian operator.
-- `g::Vector`: Gradient.
-- `g_norm::Real`: Gradient norm.
-- `tol::Real`: Step tolerance (optional).
 - `max_time::Real`: Maximum allowed time (optional).
 
 # Updates
-- `solver.p` with computed search directions.
+- `x` updated iterate.
 - `stats` with iteration info.
 """
-function step!(opt::NewtonOptimizer, solver::NewtonSolver, stats::QuasiNewtonStats, H::Hv, g::S, g_norm::R; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}, Hv<:HvpOperator}
+function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Regularization
-    λ = regularizer(opt, g_norm)
+    λ = regularizer(opt, obj.g_norm)
 
     update_λ!(stats, λ)
 
@@ -182,14 +177,14 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, stats::QuasiNewtonSta
     ζ = 0.5
     ξ = R(0.01)
 
-    atol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(1+ζ)))
-    rtol = max(sqrt(eps(R)), min(ξ, ξ*g_norm^(ζ)))
+    atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
+    rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
 
     # Solve
     if solver.posdef
-        krylov_solve!(solver.workspace, H, -g, [λ], itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
+        krylov_solve!(solver.workspace, obj.H, -obj.g, [λ], itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
     else
-        krylov_solve!(solver.workspace, H, -g, λ=λ, itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
+        krylov_solve!(solver.workspace, obj.H, -obj.g, λ=λ, itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
     end
 
     update_r!(stats, norm(statistics(solver.workspace).residuals))
@@ -197,5 +192,70 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, stats::QuasiNewtonSta
 
     solver.p .= solution(solver.workspace)[1]
 
-    return
+    # Linesearch
+    status = opt.linesearch!(opt, x, obj, stats)
+
+    # Update
+    if status
+        x .+= opt.η*solver.p
+    end
+
+    return status
+end
+
+#########################################################
+# Backtracking linesearch
+#########################################################
+
+"""
+Perform a cubic-order backtracking line search.
+
+# Arguments
+- `opt::NewtonOptimizer`: Optimizer instance.
+- `x::S`: Current iterate.
+- `p::F`: Step function.
+- `obj:Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+
+# Updates
+- `opt.solver.p` with scaled search direction.
+- `opt.M` with updated regularization.
+
+# Returns
+- `status::Bool`: Always returns `true`.
+"""
+function backtrack!(opt::NewtonOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+    
+    # Setup
+    p = opt.solver.p
+    status = true
+
+    function ϕ(t)
+        stats.f_evals += 1
+        return obj.f(x+t*p)
+    end
+
+    function dϕ(t)
+        stats.f_evals += 1
+        obj.fg!(obj.g, x+t*p)
+        
+        stats.g_evals += 1
+
+        return dot(p, obj.g)
+    end
+
+    function ϕdϕ(t)
+        stats.f_evals += 1
+        phi = obj.fg!(obj.g, x+t*p)
+
+        stats.g_evals += 1
+
+        dphi = dot(p, obj.g)
+        return (phi, dphi)
+    end  
+
+    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, one(R), obj.fval, dot(p, obj.g))
+    opt.η = η
+
+    return status
 end
