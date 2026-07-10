@@ -105,7 +105,7 @@ Compute regularization parameter for R-SFN.
 - `λ::Real`: Regularization parameter.
 """
 @inline function regularizer(opt::RSFNOptimizer, g_norm::R) where {R}
-    return iszero(opt.M) ? zero(g_norm) : clamp(R(opt.M)*g_norm, eps(R), R(1e16))
+    return iszero(opt.M) ? zero(g_norm) : max(R(opt.M)*g_norm, eps(R))
 end
 
 #########################################################
@@ -499,7 +499,8 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         # println(norm(opt.M))
 
         # NOTE: Do we need this
-        if abs(dec) ≤ eps(R) || opt.M == Inf
+        if opt.M == Inf
+            stats.status = "Linesearch failure"
             status = false
             break
         end
@@ -507,12 +508,10 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         stats.f_evals += 1
 
         if obj.f(x + opt.solver.p) - obj.fval ≤ dec
-            # opt.M = clamp(R(opt.M)*opt.M₋, R(1e-8), R(1e8)) # decrease regularization
-            opt.M = max(opt.M*opt.M₋, 1e-10)
+            opt.M = max(opt.M*opt.M₋, eps(R)) # decrease regularization
             status = true
         else
-            # opt.M = clamp(R(opt.M)*opt.M₊, R(1e-8), R(1e8)) # increase regularization
-            opt.M = opt.M*opt.M₊
+            opt.M = opt.M*opt.M₊ # increase regularization
         end
     end
 
