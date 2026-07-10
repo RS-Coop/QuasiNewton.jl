@@ -14,7 +14,6 @@ Adaptive Regularization with Cubics (ARC) optimizer.
 # Fields
 - `solver::ARCSolver`: Subproblem solver for computing search directions.
 - `M::Real`: Cubic regularization.
-- `η::Float`: Step size.
 - `η1::Float`: ARC acceptance threshold (lower bound).
 - `η2::Float`: ARC acceptance threshold (upper bound for very successful step).
 - `γ1::Float`: Factor to reduce `M` when step unsuccessful.
@@ -22,10 +21,9 @@ Adaptive Regularization with Cubics (ARC) optimizer.
 - `atol::Float`: Absolute gradient norm tolerance.
 - `rtol::Float`: Relative gradient norm tolerance.
 """
-mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, F<:Function, R2<:AbstractFloat} <: QuasiNewtonOptimizer
-    solver::Q # search direction solver
+mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, R2<:AbstractFloat} <: QuasiNewtonOptimizer
+    const solver::Q # search direction solver
     M::R1 #
-    const η::R2 #
     const η1::R2 #
     const η2::R2 #
     const γ1::R2 #
@@ -51,7 +49,7 @@ Constructor for `ARCOptimizer`.
 # Returns
 - `ARCOptimizer` instance.
 """
-function ARCOptimizer(dim::Int; solver::Solver=ARCSolver, M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0.1, γ2::R2=5.0, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function ARCOptimizer(dim::Int; solver::Solver=ARCSolver, M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0.1, γ2::R2=5.0, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, R2<:AbstractFloat}
 
     #
     @assert 0<M
@@ -60,7 +58,7 @@ function ARCOptimizer(dim::Int; solver::Solver=ARCSolver, M::R1=10.0, η1::R2=0.
 
     solver_ = solver(dim; kwargs...)
 
-    return ARCOptimizer(solver_, M, 1.0, η1, η2, γ1, γ2, atol, rtol)
+    return ARCOptimizer(solver_, M, η1, η2, γ1, γ2, atol, rtol)
 end
 
 """
@@ -94,10 +92,10 @@ ARC subproblem solver using shifted CG Lanczos.
 - `krylov_order::Int`: Maximum Krylov subspace size.
 - `shifts::Vector`: Shift values for cubic regularization.
 """
-mutable struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
+struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
     workspace::W # Krylov workspace
-    const krylov_order::Int # maximum Krylov subspace size
-    const shifts::S # shifts
+    krylov_order::Int # maximum Krylov subspace size
+    shifts::S # shifts
 end
 
 """
@@ -115,12 +113,12 @@ Constructor for `ARCSolver`.
 function ARCSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, num_shifts::Int=61, krylov_order::Int=0)
 
     # Shifts
-    shifts = 10.0 .^ range(-10.0,20.0,length=num_shifts)
+    shifts = 10.0 .^ range(-10.0, 20.0, length=num_shifts)
 
     # Krylov workspace
     workspace = CgLanczosShiftWorkspace(dim, dim, num_shifts, type)
 
-    return ARCSolver(workspace, krylov_order, shifts, type(undef, dim))
+    return ARCSolver(workspace, krylov_order, shifts)
 end
 
 """
@@ -173,15 +171,15 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, x::S, obj::Objective, stats
     shift_failure = false
     M_new = opt.M
     
-    i = findfirst(opt.solver.workspace.converged)
+    i = findfirst(solver.workspace.converged)
 
     if i === nothing
         return status
     end
 
-    X = solution(opt.solver.workspace)
+    X = solution(solver.workspace)
 
-    j = argmin(abs.(opt.M*opt.solver.shifts[i:end]-norm.(X[i:end]))) + i-1
+    j = argmin(abs.(opt.M*solver.shifts[i:end] - twonorm.(X[i:end]))) + i - 1
 
     while !status && !shift_failure
         stats.f_evals += 1
@@ -193,12 +191,12 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, x::S, obj::Objective, stats
             M_new = opt.M
 
             while M_new > opt.γ1*opt.M
-                if j == length(opt.solver.shifts)
+                if j == length(solver.shifts)
                     stats.status = "No next shift"
                     shift_failure = true
                     break
                 end
-                M_new = twonorm(X[j+1])/opt.solver.shifts[j+1]
+                M_new = twonorm(X[j+1]) / solver.shifts[j+1]
                 j += 1
             end
             
@@ -206,8 +204,8 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, x::S, obj::Objective, stats
         else
             status = true
 
-            update_λ!(stats, opt.solver.shifts[j])
-            update_r!(stats, opt.solver.workspace.rNorms[j])
+            update_λ!(stats, solver.shifts[j])
+            update_r!(stats, solver.workspace.rNorms[j])
 
             # Update
             x .+= X[j]

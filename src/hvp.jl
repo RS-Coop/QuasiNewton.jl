@@ -123,7 +123,6 @@ Hessian-vector product operator compatible with LinearOperators.jl.
 
 # Fields
 - `f::Function`: Function that generates the Hessian operator at a given point.
-- `x::AbstractVector`: Current point.
 - `op::AbstractLinearOperator`: Linear operator representing the Hessian at `x`.
 - `nprod::Int`: Counter of Hessian-vector products applied.
 """
@@ -145,7 +144,7 @@ Constructor for `LHvpOperator`.
 # Returns
 - `LHvpOperator` instance.
 """
-function LHvpOperator(f::F, x::S) where {F<:Function, R, S<:AbstractVector{R}}
+function LHvpOperator(f::F, x::S) where {F, S}
 	op = f(x)
 	return LHvpOperator(f, x, op, 0)
 end
@@ -157,8 +156,8 @@ Update the operator to a new point.
 - `H::LHvpOperator`: Hessian operator.
 - `x::AbstractVector`: New point.
 """
-@inline function update!(H::LHvpOperator, x::S) where {S}
-	copyto!(H.x, x)
+@inline function update!(H::LHvpOperator{<:Any, R}, x::S) where {R, S}
+	H.x .= x
     H.op = H.f(x)
 	return nothing
 end
@@ -174,7 +173,7 @@ In-place matrix-vector multiplication with `LHvpOperator`.
 # Returns
 - `y`: Updated with `H*v`.
 """
-@inline Base.@propagate_inbounds function LinearAlgebra.mul!(y::AbstractVector{R}, H::LHvpOperator, v::AbstractVector{R}) where {R}
+@inline Base.@propagate_inbounds function LinearAlgebra.mul!(y::AbstractVector{R}, H::LHvpOperator{<:Any, R}, v::AbstractVector{R}) where {R}
     H.nprod += 1
     mul!(y, H.op, v)
     return y
@@ -195,7 +194,7 @@ Hessian-vector product operator compatible with DifferentiationInterface.jl.
 - `nprod::Int`: Counter of Hessian-vector products applied.
 - `_x`, `_v`, `_y::Vector`: Internal temporary storage.
 """
-mutable struct ADHvpOperator{F<:Function, R, S<:AbstractVector{R}, P, B} <: HvpOperator{R}
+mutable struct ADHvpOperator{F, R, S<:AbstractVector{R}, P, B} <: HvpOperator{R}
     const f::F
 	x::S
 	const ad_backend::B
@@ -217,7 +216,7 @@ Constructor for `ADHvpOperator`.
 # Returns
 - `ADHvpOperator` instance.
 """
-function ADHvpOperator(f::F, x::S, ad_backend::B) where {F<:Function, R, S<:AbstractVector{R}, B}
+function ADHvpOperator(f::F, x::S, ad_backend::B) where {F, R, S<:AbstractVector{R}, B}
 	prep = prepare_hvp_same_point(f, ad_backend, x, (similar(x),))
     return ADHvpOperator(f, x, ad_backend, prep, 0, Vector(x), Vector{R}(undef,length(x)), Vector{R}(undef,length(x)))
 end
@@ -247,7 +246,7 @@ In-place matrix-vector multiplication with `ADHvpOperator`.
 # Returns
 - `y`: Updated with `H*v`.
 """
-@inline Base.@propagate_inbounds function LinearAlgebra.mul!(y::AbstractVector{R}, H::ADHvpOperator, v::AbstractVector{R}) where {R}
+@inline Base.@propagate_inbounds function LinearAlgebra.mul!(y::AbstractVector{R}, H::ADHvpOperator{<:Any, R}, v::AbstractVector{R}) where {R}
 	H.nprod += 1
 
     # hvp!(H.f, (y,), H.prep, H.ad_backend, H.x, (v,))
@@ -259,58 +258,4 @@ In-place matrix-vector multiplication with `ADHvpOperator`.
     copyto!(y, H._y)
 
 	return y
-end
-
-#########################################################
-
-"""
-Hessian Lipschitz estimate.
-
-NOTE: This could be more efficient if we could do block computations (e.g., Hessian-Matrix products)
-"""
-@inline function estimate_M(x::S, obj::Objective, stats::QuasiNewtonStats; samples::Int=1) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    h = eps(R)^(1/3)*max(one(R), norm(x))
-
-	M_est = zero(R)
-
-	for i=1:samples
-    
-		ζ = randn(R, length(x))
-		normalize!(ζ)
-		
-		g2 = similar(x)
-		obj.fg!(g2, @. x + h*ζ)
-		stats.g_evals += 1
-
-		y = similar(ζ)
-		mul!(y, obj.H, ζ)
-
-		@. g2 = g2 - g - h*y
-
-		M_est += twonorm(g2)/h^2
-	end
-
-	M_est /= samples
-
-    return isnan(M_est) ? 1e0 : min(2*M_est, 1e8)
-end
-
-@inline function estimate_M(x::S, obj::Objective, p::S, p_norm::R=twonorm(p), stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    h = eps(R)^(1/3)*max(one(R), norm(x))
-
-	ζ = copy(p)
-	ζ ./= p_norm
-    
-    g2 = similar(x)
-    obj.fg!(g2, @. x + h*ζ)
-    stats.g_evals += 1
-
-	y = similar(ζ)
-    mul!(y, obj.H, ζ)
-
-    @. g2 = g2 - g - h*y
-
-    M_est = twonorm(g2)/h^2
-
-	return isnan(M_est) ? 1e0 : min(2*M_est, 1e8)
 end

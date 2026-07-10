@@ -24,8 +24,8 @@ Regularized Saddle-Free Newton (R-SFN) optimizer.
 - `atol::AbstractFloat`: Absolute gradient tolerance.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
-mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F<:Function} <: QuasiNewtonOptimizer
-    solver::Q # search direction solver
+mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: QuasiNewtonOptimizer
+    const solver::Q # search direction solver
     M::R # local Hessian Lipschitz constant
     const linesearch!::F # linesearch function
     const η::R # step-size
@@ -62,14 +62,11 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
     @assert 1<M₊ && 0<M₋ && M₋<1
 
     # Linesearch parameters
-    if isnothing(linesearch)
+    if isnothing(linesearch) || iszero(M)
         @assert 0<η && η≤1
-        linesearch = (args...) -> return true
+        linesearch = search_default!
     else
         @assert 0<η₋ && η₋<1
-        if iszero(M)
-            linesearch = backtrack!
-        end
     end
 
     # Solver
@@ -109,6 +106,94 @@ Compute regularization parameter for R-SFN.
 """
 @inline function regularizer(opt::RSFNOptimizer, g_norm::R) where {R}
     return iszero(opt.M) ? zero(g_norm) : clamp(R(opt.M)*g_norm, eps(R), R(1e16))
+end
+
+#########################################################
+# EigenSolver: Full eigendecomposition solver
+#########################################################
+
+"""
+Full eigendecomposition R-SFN search direction solver.
+
+# Fields
+- `p::Vector`: Search direction.
+- `cache::Vector`: Temporary memory.
+"""
+mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
+    cache::S # temporary memory
+    const eigenstep::Bool # add eigenstep in negative eigenspace
+    p::S # search direction
+end
+
+"""
+Constructor for `EigenSolver`.
+
+# Arguments
+- `dim::Int`: Problem dimension.
+- `type`: Vector type (default: `Vector{Float64}`).
+
+# Returns
+- `EigenSolver` instance.
+"""
+function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, eigenstep::Bool=false)
+    return EigenSolver(type(undef, dim), eigenstep, type(undef, dim))
+end
+
+"""
+Compute a single R-SFN step using `EigenSolver`.
+
+# Arguments
+- `opt::RSFNOptimizer`: Optimizer.
+- `solver::EigenSolver`: Solver instance.
+- `x::S`: Current iterate.
+- `obj:Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization statistics.
+- `max_time::Real`: Maximum allowed time (optional).
+
+# Updates
+- `x` updated iterate.
+- `stats` with iteration info.
+"""
+function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
+
+    # Eigendecomposition
+    E = eigen!(Matrix(obj.H))
+
+    function p!()
+        # Negative eigenstep
+        if solver.eigenstep
+            μ, i = findmin(E.values)
+
+            if μ < 0 && obj.g_norm ≤ μ^2/opt.M
+                @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
+                solver.p .-= sign(dot(solver.cache, obj.g))*solver.cache
+                return -(2/3)*μ^3/opt.M^2
+            end
+        end
+
+        # Regularization
+        λ = regularizer(opt, obj.g_norm)
+
+        # Update search direction
+        mul!(solver.cache, E.vectors', -obj.g)
+        @. solver.cache *= pinv(sqrt(E.values^2 + λ))
+        mul!(solver.p, E.vectors, solver.cache)
+
+        return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
+    end
+
+    # Linesearch
+    status = opt.linesearch!(opt, x, p!, obj, stats)
+
+    # Update
+    if status
+        x .+= opt.η*solver.p
+    end
+
+    # Stats
+    update_λ!(stats, regularizer(opt, obj.g_norm))
+
+    return status
 end
 
 #########################################################
@@ -219,7 +304,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
         @views @. cache1 = (E.values - s)*E.vectors[1,:]
         mul!(cache2, E.vectors, cache1)
 
-        @views mul!(solver.p, Q[:,1:solver.depth], cache2, -obj.g_norm, 1.)
+        @views mul!(solver.p, Q[:,1:solver.depth], cache2, -obj.g_norm, 0.)
         solver.p .-= s*obj.g
         
         return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
@@ -363,7 +448,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     end
     
     # Linesearch
-    status = opt.linesearch!(opt, x, obj, stats)
+    status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Update
     if status
@@ -377,96 +462,13 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
 end
 
 #########################################################
-# EigenSolver: Full eigendecomposition solver
-#########################################################
-
-"""
-Full eigendecomposition R-SFN search direction solver.
-
-# Fields
-- `p::Vector`: Search direction.
-- `cache::Vector`: Temporary memory.
-"""
-mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
-    cache::S # temporary memory
-    const eigenstep::Bool # add eigenstep in negative eigenspace
-    p::S # search direction
-end
-
-"""
-Constructor for `EigenSolver`.
-
-# Arguments
-- `dim::Int`: Problem dimension.
-- `type`: Vector type (default: `Vector{Float64}`).
-
-# Returns
-- `EigenSolver` instance.
-"""
-function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, eigenstep::Bool=false)
-    return EigenSolver(type(undef, dim), eigenstep, type(undef, dim))
-end
-
-"""
-Compute a single R-SFN step using `EigenSolver`.
-
-# Arguments
-- `opt::RSFNOptimizer`: Optimizer.
-- `solver::EigenSolver`: Solver instance.
-- `x::S`: Current iterate.
-- `obj:Objective`: Objective function instance.
-- `stats::QuasiNewtonStats`: Optimization statistics.
-- `max_time::Real`: Maximum allowed time (optional).
-
-# Updates
-- `x` updated iterate.
-- `stats` with iteration info.
-"""
-function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
-
-    # Eigendecomposition
-    E = eigen!(Matrix(obj.H))
-
-    function p!()
-        # Negative eigenstep
-        if solver.eigenstep
-            μ, i = findmin(E.values)
-
-            if μ < 0 && obj.g_norm ≤ μ^2/opt.M
-                @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-                solver.p .-= sign(dot(solver.cache, obj.g))*solver.cache
-                return -(2/3)*μ^3/opt.M^2
-            end
-        end
-
-        # Regularization
-        λ = regularizer(opt, obj.g_norm)
-
-        # Update search direction
-        mul!(solver.cache, E.vectors', -obj.g)
-        @. solver.cache *= pinv(sqrt(E.values^2 + λ))
-        mul!(solver.p, E.vectors, solver.cache)
-
-        return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
-    end
-
-    # Linesearch
-    status = opt.linesearch!(opt, x, obj, stats)
-
-    # Update
-    if status
-        x .+= opt.η*solver.p
-    end
-
-    # Stats
-    update_λ!(stats, regularizer(opt, obj.g_norm))
-
-    return status
-end
-
-#########################################################
 # Backtracking regularization/stepsize linesearch
 #########################################################
+
+function search_default!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+    p!()
+    return true
+end
 
 """
 Perform an in-place regularization-based line search.
@@ -488,25 +490,29 @@ Perform an in-place regularization-based line search.
 function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
-    status = true
+    status = false
 
     # Backtracking loop
-    while status
+    while !status
         dec = p!()
 
+        # println(norm(opt.M))
+
         # NOTE: Do we need this
-        if dec ≤ eps(R)
+        if abs(dec) ≤ eps(R) || opt.M == Inf
             status = false
             break
         end
 
         stats.f_evals += 1
 
-        if obj.f(x + solver.p) - obj.fval ≤ dec
-            opt.M = clamp(R(opt.M)*opt.M₋, R(1e-8), R(1e8)) # decrease regularization
-            break
+        if obj.f(x + opt.solver.p) - obj.fval ≤ dec
+            # opt.M = clamp(R(opt.M)*opt.M₋, R(1e-8), R(1e8)) # decrease regularization
+            opt.M = max(opt.M*opt.M₋, 1e-10)
+            status = true
         else
-            opt.M = clamp(R(opt.M)*opt.M₊, R(1e-8), R(1e8)) # increase regularization
+            # opt.M = clamp(R(opt.M)*opt.M₊, R(1e-8), R(1e8)) # increase regularization
+            opt.M = opt.M*opt.M₊
         end
     end
 
@@ -530,7 +536,7 @@ Perform an in-place step-size line search.
 # Returns
 - `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
 """
-function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     throw(ErrorException("Not currently implemented"))
 
     # Setup
@@ -567,7 +573,7 @@ function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewton
                     # opt.M*opt.M₊ # increase regularization
                     opt.M/η^2
                 else
-                    η*opt.M + (1-η)*estimate_M(stats, x, obj.g, obj.fg!, obj.H, p, p_norm) # re-estimate regularization
+                    η*opt.M + (1-η)*estimate_M(x, obj, p ./ p_norm, stats) # re-estimate regularization
                 end
 
             opt.M = clamp(M_est, R(1e-8), R(1e8))

@@ -19,7 +19,7 @@ module QuasiNewton
 
 	include("utilities.jl")
 	include("hvp.jl")
-	iclude("objective.jl")
+	include("objective.jl")
 	include("optimizers/optimizers.jl")
 	include("minimize.jl")
 
@@ -48,7 +48,7 @@ module QuasiNewton
 	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`).
 	- `ad_backend`: Automatic differentiation backend.
 	- `max_iter::Int=1000`: Maximum number of iterations.
-	- `max_time::T=Inf`: Maximum allowed time.
+	- `max_time::R=Inf`: Maximum allowed time.
 	- `history::Bool=false`: If true, stores iteration history.
 	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor.
 
@@ -58,7 +58,7 @@ module QuasiNewton
 	# Returns
 	- `stats`: Optimization statistics including final solution, convergence info, and optionally history.
 	"""
-	function minimize!(x::S, f::F, optimizer::Val{optimizer_}, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F<:Function, optimizer_, T}
+	function minimize!(x::S, f::F, optimizer::Val{optimizer_}, ad_backend; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, optimizer_, R}
 		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
 		obj = Objective(x, f, ad_backend)
 		
@@ -75,7 +75,7 @@ module QuasiNewton
 	- `H`: Hessian or Hessian-like operator.
 	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`).
 	- `max_iter::Int=1000`: Maximum number of iterations.
-	- `max_time::T=Inf`: Maximum allowed time.
+	- `max_time::R=Inf`: Maximum allowed time.
 	- `history::Bool=false`: If true, stores iteration history.
 	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor.
 
@@ -85,7 +85,7 @@ module QuasiNewton
 	# Returns
 	- `stats`: Optimization statistics including final solution, convergence info, and optionally history.
 	"""
-	function minimize!(x::S, f::F1, fg!::F2, H::L, optimizer::Val{optimizer_}; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1<:Function, F2<:Function, L, optimizer_, T}
+	function minimize!(x::S, f::F1, fg!::F2, H::L, optimizer::Val{optimizer_}; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, optimizer_, R}
 		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
 		obj = Objective(x, f, fg!, H)
 		
@@ -96,18 +96,20 @@ module QuasiNewton
 	# Newton
 	#########################################################
 
-	function newton!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
+	function newton!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, R}
 		opt = NewtonOptimizer(size(x,1); kwargs...)
+		obj = Objective(x, f, ad_backend)
 
-		stats = minimize!(opt, x, f, ad_backend; max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end
 
-	function newton!(x::S, f::F1, fg!::F2, H::M; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M, T}
+	function newton!(x::S, f::F1, fg!::F2, H::L; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, R}
 		opt = NewtonOptimizer(size(x,1); kwargs...)
+		obj = Objective(x, f, fg!, H)
 
-		stats = minimize!(opt, x, f, fg!, H; max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj, H; max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end
@@ -116,18 +118,20 @@ module QuasiNewton
 	# R-SFN
 	#########################################################
 
-	function rsfn!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
+	function rsfn!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, R}
 		opt = RSFNOptimizer(size(x,1); kwargs...)
+		obj = Objective(x, f, ad_backend)
 
-		stats = minimize!(opt, x, f, ad_backend; max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end
 
-	function rsfn!(x::S, f::F1, fg!::F2, H::M; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M, T}
+	function rsfn!(x::S, f::F1, fg!::F2, H::L; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, R}
 		opt = RSFNOptimizer(size(x,1); kwargs...)
+		obj = Objective(x, f, fg!, H)
 
-		stats = minimize!(opt, x, f, fg!, H, max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj, max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end
@@ -136,18 +140,20 @@ module QuasiNewton
 	# ARC
 	#########################################################
 
-	function arc!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, T}
+	function arc!(x::S, f::F, ad_backend; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F, R}
 		opt = ARCOptimizer(size(x,1); kwargs...)
+		obj = Objective(x, f, ad_backend)
 
-		stats = minimize!(opt, x, f, ad_backend; max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end
 
-	function arc!(x::S, f::F1, fg!::F2, H::M; max_iter::Int=1000, max_time::T=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, M, T}
+	function arc!(x::S, f::F1, fg!::F2, H::L; max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, R}
 		opt = ARCOptimizer(size(x,1); kwargs...)
+		obj = Objective(x, f, fg!, H)
 
-		stats = minimize!(opt, x, f, fg!, H; max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end

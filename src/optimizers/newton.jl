@@ -22,8 +22,8 @@ using LineSearches: BackTracking
 - `atol::AbstractFloat`: Absolute gradient tolerance.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
-mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F<:Function} <: QuasiNewtonOptimizer
-    solver::Q # search direction solver
+mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: QuasiNewtonOptimizer
+    const solver::Q # search direction solver
     M::R # hessian regularization scaling
     const linesearch!::F # linesearch function
     const η::R # step-size
@@ -116,23 +116,22 @@ Uses:
 - `krylov_order::Int`: Maximum Krylov subspace size.
 - `p::Vector`: Search direction.
 """
-mutable struct NewtonSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
+struct NewtonSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
     workspace::W # krylov workspace
-    const posdef::Bool # positive definite
-    const krylov_order::Int # maximum Krylov subspace size
-    p::S # search direction
+    posdef::Bool # positive definite
+    krylov_order::Int # maximum Krylov subspace size
 end
 
 @inline function newton_solver(dim::Int, type::Type{<:AbstractVector{<:AbstractFloat}}, krylov_order::Int, ::Val{true})
     workspace = CgLanczosShiftWorkspace(dim, dim, 1, type)
 
-    return NewtonSolver(workspace, true, krylov_order, type(undef, dim))
+    return NewtonSolver(workspace, true, krylov_order)
 end
 
 @inline function newton_solver(dim::Int, type::Type{<:AbstractVector{<:AbstractFloat}}, krylov_order::Int, ::Val{false})
     workspace = SymmlqWorkspace(dim, dim, type)
     
-    return NewtonSolver(workspace, false, krylov_order, type(undef, dim))
+    return NewtonSolver(workspace, false, krylov_order)
 end
 
 """
@@ -190,10 +189,8 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective,
     update_r!(stats, norm(statistics(solver.workspace).residuals))
     update_k!(stats, iteration_count(solver.workspace))
 
-    solver.p .= solution(solver.workspace)[1]
-
     # Linesearch
-    status = opt.linesearch!(opt, x, obj, stats)
+    status = opt.linesearch!(opt, x, solution(solver.workspace)[1], obj, stats)
 
     # Update
     if status
@@ -224,20 +221,19 @@ Perform a cubic-order backtracking line search.
 # Returns
 - `status::Bool`: Always returns `true`.
 """
-function backtrack!(opt::NewtonOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+function backtrack!(opt::NewtonOptimizer, x::S, p::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Setup
-    p = opt.solver.p
     status = true
 
     function ϕ(t)
         stats.f_evals += 1
-        return obj.f(x+t*p)
+        return obj.f(x + t*p)
     end
 
     function dϕ(t)
         stats.f_evals += 1
-        obj.fg!(obj.g, x+t*p)
+        obj.fg!(obj.g, x + t*p)
         
         stats.g_evals += 1
 
@@ -246,7 +242,7 @@ function backtrack!(opt::NewtonOptimizer, x::S, obj::Objective, stats::QuasiNewt
 
     function ϕdϕ(t)
         stats.f_evals += 1
-        phi = obj.fg!(obj.g, x+t*p)
+        phi = obj.fg!(obj.g, x + t*p)
 
         stats.g_evals += 1
 
@@ -255,7 +251,8 @@ function backtrack!(opt::NewtonOptimizer, x::S, obj::Objective, stats::QuasiNewt
     end  
 
     η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, one(R), obj.fval, dot(p, obj.g))
-    opt.η = η
+    
+    p .*= η
 
     return status
 end

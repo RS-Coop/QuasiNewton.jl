@@ -11,7 +11,7 @@ export QuasiNewtonStats
 #########################################################
 
 mutable struct QuasiNewtonStats{R<:Real}
-    history::Bool # sequence history
+    const history::Bool # sequence history
     converged::Bool # whether optimizer has converged
     iterations::Int # number of optimizer iterations
     runtime::Float64 # iteration runtime

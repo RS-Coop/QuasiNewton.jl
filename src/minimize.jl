@@ -39,17 +39,14 @@ Performs the core iteration loop to minimize a scalar function `f`.
   - `k_seq::Vector{Int}`: Krylov iteration counts if `history=true`.
   - `status::String`: Exit status.
 """
-function iterate!(opt::Opt, x::S, obj::Obj; max_iter::Int, max_time::T, history::Bool) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, F1<:Function, F2<:Function, Hv<:HvpOperator, T}
+function minimize!(opt::Opt, x::S, obj::Objective; max_iter::Int, max_time::T, history::Bool) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, T}
     # Start time
     tic = time_ns()
     
     # Stats
     stats = QuasiNewtonStats{R}(history)
-    # converged = false
+    converged = false
     iterations = 0
-
-    # Objective function
-    obj = Objective(x, f, fg!, H)
 
     # Tolerance
     tol = opt.atol + opt.rtol*obj.g_norm
@@ -60,7 +57,7 @@ function iterate!(opt::Opt, x::S, obj::Obj; max_iter::Int, max_time::T, history:
     # Estimate regularization
     if !converged && isnan(opt.M)
         M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
-        opt.M = clamp(M_est, R(1e-8), R(1e8)/g_norm)
+        opt.M = clamp(M_est, R(1e-8), R(1e8)/obj.g_norm)
 
         # println("M Estimate: ", opt.M)
     end
@@ -93,14 +90,14 @@ function iterate!(opt::Opt, x::S, obj::Obj; max_iter::Int, max_time::T, history:
         end
 
         # Optimizer step
-        step!(opt, opt.solver, x, obj, stats; max_time=max_time-time) ? continue : break
+        step!(opt, opt.solver, x, obj, stats; max_time=max_time-time) ? nothing : break
 
         # Update objective function
         update!(obj, x)
 
         # Update stats
-        update_f!(stats, fval)
-        update_g!(stats, g_norm)
+        update_f!(stats, obj.fval)
+        update_g!(stats, obj.g_norm)
 
         # Increment
         iterations += 1

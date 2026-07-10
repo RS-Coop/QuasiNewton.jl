@@ -21,7 +21,7 @@ Objective function.
 - `fg!::Function`: In-place gradient function.
 - `H::Hv`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`).
 """
-mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, Hv}
+mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, Hv<:HvpOperator}
     fval::R # function value
     g::S # gradient
     g_norm::R # gradient norm
@@ -42,7 +42,7 @@ function Objective(x::S, f::F1, fg!::F2, H::Hv) where {R<:AbstractFloat, S<:Abst
     fval = fg!(g, x)
     g_norm = twonorm(g)
 
-    return ObjState(fval, g, g_norm, f, fg!, H)
+    return Objective(fval, g, g_norm, f, fg!, H)
 end
 
 """
@@ -76,9 +76,61 @@ end
 """
 """
 function update!(obj::Objective, x::S) where {S<:AbstractVector{<:AbstractFloat}}
-    obj.fval = obj.fg!(obj.g, obj.x)
+    obj.fval = obj.fg!(obj.g, x)
     obj.g_norm = twonorm(obj.g)
-    update!(obj.H, obj.x)
+    update!(obj.H, x)
 
     return obj
+end
+
+#########################################################
+# Hessian Lipschitz estimation
+#########################################################
+
+"""
+Hessian Lipschitz estimate.
+
+NOTE: This could be more efficient if we could do block computations (e.g., Hessian-Matrix products)
+"""
+@inline function estimate_M(x::S, obj::Objective, stats::QuasiNewtonStats; samples::Int=1) where {R<:AbstractFloat, S<:AbstractVector{R}}
+    h = eps(R)^(1/3)*max(one(R), norm(x))
+
+	M_est = zero(R)
+
+	for i=1:samples
+		ζ = randn(R, length(x))
+		normalize!(ζ)
+		
+		g2 = similar(x)
+		obj.fg!(g2, @. x + h*ζ)
+		stats.g_evals += 1
+
+		y = similar(ζ)
+		mul!(y, obj.H, ζ)
+
+		@. g2 = g2 - obj.g - h*y
+
+		M_est += twonorm(g2)/h^2
+	end
+
+	M_est /= samples
+
+    return isnan(M_est) ? one(R) : min(2*M_est, R(1e8))
+end
+
+@inline function estimate_M(x::S, obj::Objective, ζ::S, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+    h = eps(R)^(1/3)*max(one(R), norm(x))
+
+    g2 = similar(x)
+    obj.fg!(g2, @. x + h*ζ)
+    stats.g_evals += 1
+
+	y = similar(ζ)
+    mul!(y, obj.H, ζ)
+
+    @. g2 = g2 - obj.g - h*y
+
+    M_est = twonorm(g2)/h^2
+
+	return isnan(M_est) ? one(R) : min(2*M_est, R(1e8))
 end
