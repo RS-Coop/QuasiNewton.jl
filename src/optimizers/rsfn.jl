@@ -64,7 +64,7 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
     # Linesearch parameters
     if isnothing(linesearch) || iszero(M)
         @assert 0<η && η≤1
-        linesearch = (args...) -> return opt.η
+        linesearch = (args...) -> return η
     else
         @assert 0<η₋ && η₋<1
     end
@@ -160,20 +160,18 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     # Eigendecomposition
     E = eigen!(Matrix(obj.H))
 
+    μ, i = findmin(E.values)
+
     function p!()
         dec1 = 0.0
         dec2 = -Inf
 
         # Negative eigenstep
-        if solver.eigenstep
-            μ, i = findmin(E.values)
-
-            if μ < 0 && obj.g_norm ≤ μ^2/opt.M
-                # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
-                @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-                solver.ξ .= -sign(dot(solver.cache, obj.g))*solver.cache
-                dec2 = -(2/3)*μ^3/opt.M^2
-            end
+        if solver.eigenstep && μ < 0 #&& obj.g_norm ≤ μ^2/opt.M
+            # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
+            @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
+            solver.ξ .= -sign(dot(solver.cache, obj.g))*solver.cache
+            dec2 = -(2/3)*abs(μ)^3/opt.M^2
         end
 
         # Regularization
@@ -295,19 +293,17 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     cache1 = similar(obj.g, solver.depth)
     cache2 = similar(obj.g, solver.depth)
 
+    μ, i = findmin(E.values)
+
     function p!()
         dec1 = 0.0
         dec2 = -Inf
 
         # Negative eigenstep
-        if solver.eigenstep
-            μ, i = findmin(E.values)
-
-            if μ < 0 && obj.g_norm ≤ μ^2/opt.M
-                # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
-                @views mul!(solver.ξ, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 0.0)
-                dec2 = -(2/3)*μ^3/opt.M^2
-            end
+        if solver.eigenstep && μ < 0 #&& obj.g_norm ≤ μ^2/opt.M
+            # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
+            @views mul!(solver.ξ, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 0.0)
+            dec2 = -(2/3)*abs(μ)^3/opt.M^2
         end
         
         # Regularization
@@ -604,6 +600,9 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
         d1 = obj.f(x + p) - f0
         d2 = obj.f(x + ξ) - f0
+
+        # println(@sprintf("Regular step %.3e ≤? %.3e", d1, dec1))
+        # println(@sprintf("Negative step %.3e ≤? %.3e", d2, dec2))
 
         # if obj.f(x+p) - f0 ≤ dec
         if d1 ≤ dec1 && d2 ≤ dec2*η^2(3 - 2*η)
