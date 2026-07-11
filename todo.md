@@ -1,6 +1,5 @@
 # Imporvements/Features
 - ADHvpOperator mul! without having to convert to Vector
-- Custom Newton linesearch
 - What happens if krylov processes for Newton or RN haven't converged?
 - It would be nice to only use LinearOperator.jl, but they have no way of updating the operator in place
 - Krylov subspace recycling

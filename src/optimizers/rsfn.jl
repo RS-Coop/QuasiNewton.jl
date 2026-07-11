@@ -64,7 +64,7 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
     # Linesearch parameters
     if isnothing(linesearch) || iszero(M)
         @assert 0<η && η≤1
-        linesearch = search_default!
+        linesearch = (args...) -> return opt.η
     else
         @assert 0<η₋ && η₋<1
     end
@@ -487,11 +487,6 @@ end
 # Backtracking regularization/stepsize linesearch
 #########################################################
 
-function search_default!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
-    p!()
-    return true
-end
-
 """
 Perform an in-place regularization-based line search.
 
@@ -530,8 +525,8 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
 
         stats.f_evals += 2
 
-        d1 = obj.f(x + opt.solver.p) - obj.fval
-        d2 = obj.f(x + opt.solver.ξ) - obj.fval
+        d1 = obj.f(x + opt.solver.p) - f0
+        d2 = obj.f(x + opt.solver.ξ) - f0
 
         if d1 ≤ dec1 && d2 ≤ dec2
             d1 ≤ d2 ? choice = 1 : choice = 2
@@ -548,7 +543,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
             opt.M = opt.M*opt.M₊ # increase regularization
         end
 
-        # if obj.f(x + opt.solver.p) - obj.fval ≤ dec1
+        # if obj.f(x + opt.solver.p) - f0 ≤ dec1
         #     opt.M = max(opt.M*opt.M₋, eps(R)) # decrease regularization
         #     return 1
         # else
@@ -579,20 +574,19 @@ Perform an in-place step-size line search.
 function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
+    status = true
+
+    f0 = obj.fval
+
     dec1, dec2 = p!()
     p = opt.solver.p
     ξ = opt.solver.ξ
     p_norm = twonorm(p)
     ξ_norm = twonorm(ξ)
-    status = true
+    
     # λ = regularizer(opt, obj.g_norm)
     
-    # Increase step-size
-    η = 1.0
-
-    # Scale search direction and norm
-    # p .*= η
-    # p_norm *= η 
+    η = one(R)
     
     # Target decrement
     # dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
@@ -604,14 +598,14 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
     choice = 0
 
-    # NOTE: Can we just iteratively update x, is that even that much better?
+    # Backtrack
     while status
         stats.f_evals += 2
 
-        d1 = obj.f(x + p) - obj.fval
-        d2 = obj.f(x + ξ) - obj.fval
+        d1 = obj.f(x + p) - f0
+        d2 = obj.f(x + ξ) - f0
 
-        # if obj.f(x+p) - obj.fval ≤ dec
+        # if obj.f(x+p) - f0 ≤ dec
         if d1 ≤ dec1 && d2 ≤ dec2*η^2(3 - 2*η)
             d1 ≤ d2 ? choice = 1 : choice = 2
         elseif d1 ≤ dec1
@@ -651,7 +645,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         end
     end
 
-    println(η)
+    # println(η)
 
     # Fallback to basic backtracking if linesearch failed
     return choice #|| backtrack!(opt, x, obj, stats)

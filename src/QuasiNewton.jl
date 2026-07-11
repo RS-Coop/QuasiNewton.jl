@@ -109,7 +109,7 @@ module QuasiNewton
 		opt = NewtonOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, fg!, H)
 
-		stats = minimize!(opt, x, obj, H; max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end
@@ -131,7 +131,7 @@ module QuasiNewton
 		opt = RSFNOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, fg!, H)
 
-		stats = minimize!(opt, x, obj, max_iter=max_iter, max_time=max_time, history=history)
+		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 
 		return stats
 	end

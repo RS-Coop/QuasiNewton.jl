@@ -4,8 +4,6 @@ Author: Cooper Simpson
 (Regularized/Damped) Newton.
 =#
 
-using LineSearches: BackTracking
-
 #########################################################
 # Newton Optimizer
 #########################################################
@@ -18,7 +16,7 @@ using LineSearches: BackTracking
 - `M::AbstractFloat`: Hessian regularization scaling.
 - `linesearch!::Function`: Linesearch function.
 - `η::AbstractFloat`: Step size.
-- `α::AbstractFloat`: Linesearch reduction factor.
+- `η₋::AbstractFloat`: Linesearch reduction factor.
 - `atol::AbstractFloat`: Absolute gradient tolerance.
 - `rtol::AbstractFloat`: Relative gradient tolerance.
 """
@@ -27,7 +25,7 @@ mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: Qua
     M::R # hessian regularization scaling
     const linesearch!::F # linesearch function
     const η::R # step-size
-    const α::R # linesearch reduction factor
+    const η₋::R # linesearch reduction factor
     const atol::R # absolute gradient norm tolerance
     const rtol::R # relative gradient norm tolerance
 end
@@ -41,7 +39,7 @@ Constructor for `NewtonOptimizer`.
 - `M::Float`: Hessian regularization scaling (default: `0.0`).
 - `linesearch::Function`: Linesearch function (default: `backtrack!`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
-- `α::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
+- `η₋::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
 - `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
 - `kwargs`: Keyword arguments passed to solver constructor.
@@ -49,7 +47,7 @@ Constructor for `NewtonOptimizer`.
 # Returns
 - `NewtonOptimizer` instance.
 """
-function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack!, η::R2=1.0, α::R2=0.5, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
+function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack!, η::R2=1.0, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
 
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -57,13 +55,13 @@ function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=b
     # Linesearch parameters
     if isnothing(linesearch)
         @assert 0<η && η≤1
-        linesearch = (args...) -> return true
+        linesearch = (args...) -> return opt.η
     end
 
     # Solver
     solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
-    return NewtonOptimizer(solver, R2(M), linesearch, η, α, atol, rtol)
+    return NewtonOptimizer(solver, R2(M), linesearch, η, η₋, atol, rtol)
 end
 
 """
@@ -116,7 +114,7 @@ Uses:
 - `krylov_order::Int`: Maximum Krylov subspace size.
 - `p::Vector`: Search direction.
 """
-struct NewtonSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
+struct NewtonSolver{W<:KrylovWorkspace} <: QuasiNewtonSolver
     workspace::W # krylov workspace
     posdef::Bool # positive definite
     krylov_order::Int # maximum Krylov subspace size
@@ -182,19 +180,21 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective,
     # Solve
     if solver.posdef
         krylov_solve!(solver.workspace, obj.H, -obj.g, [λ], itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
+        p = solution(solver.workspace)[1]
     else
         krylov_solve!(solver.workspace, obj.H, -obj.g, λ=λ, itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
+        p = solution(solver.workspace)
     end
 
     update_r!(stats, norm(statistics(solver.workspace).residuals))
     update_k!(stats, iteration_count(solver.workspace))
 
     # Linesearch
-    status = opt.linesearch!(opt, x, solution(solver.workspace)[1], obj, stats)
+    p, status = opt.linesearch!(opt, p, x, obj, stats)
 
     # Update
     if status
-        x .+= opt.η*solver.p
+        x .+= p
     end
 
     return status
@@ -221,38 +221,43 @@ Perform a cubic-order backtracking line search.
 # Returns
 - `status::Bool`: Always returns `true`.
 """
-function backtrack!(opt::NewtonOptimizer, x::S, p::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function backtrack!(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Setup
-    status = true
+    status = false
+    c = R(1e-4)
 
-    function ϕ(t)
-        stats.f_evals += 1
-        return obj.f(x + t*p)
+    f0  = obj.fval
+    gTp = dot(obj.g, p)
+
+    η = one(R)
+
+    # Check search direction
+    if twonorm(p) < sqrt(eps(R))
+        status = false
     end
 
-    function dϕ(t)
+    # Backtrack
+    while !status
         stats.f_evals += 1
-        obj.fg!(obj.g, x + t*p)
-        
-        stats.g_evals += 1
 
-        return dot(p, obj.g)
+        f = obj.f(x + η*p)
+
+        # Armijo condition
+        if f ≤ f0 + η*c*gTp
+            p .*= η
+            status = true
+            break
+        end
+
+        # Decrement
+        η *= opt.η₋
+
+        # Check step-size
+        if η < sqrt(eps(R))
+            status = false
+        end
     end
 
-    function ϕdϕ(t)
-        stats.f_evals += 1
-        phi = obj.fg!(obj.g, x + t*p)
-
-        stats.g_evals += 1
-
-        dphi = dot(p, obj.g)
-        return (phi, dphi)
-    end  
-
-    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, one(R), obj.fval, dot(p, obj.g))
-    
-    p .*= η
-
-    return status
+    return p, status
 end
