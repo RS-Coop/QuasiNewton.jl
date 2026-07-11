@@ -55,7 +55,7 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_M!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -123,6 +123,7 @@ mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSo
     cache::S # temporary memory
     const eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
+    ξ::S
 end
 
 """
@@ -136,7 +137,7 @@ Constructor for `EigenSolver`.
 - `EigenSolver` instance.
 """
 function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, eigenstep::Bool=false)
-    return EigenSolver(type(undef, dim), eigenstep, type(undef, dim))
+    return EigenSolver(type(undef, dim), eigenstep, type(undef, dim), type(undef, dim))
 end
 
 """
@@ -160,14 +161,18 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     E = eigen!(Matrix(obj.H))
 
     function p!()
+        dec1 = 0.0
+        dec2 = -Inf
+
         # Negative eigenstep
         if solver.eigenstep
             μ, i = findmin(E.values)
 
             if μ < 0 && obj.g_norm ≤ μ^2/opt.M
+                # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
                 @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-                solver.p .-= sign(dot(solver.cache, obj.g))*solver.cache
-                return -(2/3)*μ^3/opt.M^2
+                solver.ξ .= -sign(dot(solver.cache, obj.g))*solver.cache
+                dec2 = -(2/3)*μ^3/opt.M^2
             end
         end
 
@@ -179,21 +184,27 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
         @. solver.cache *= pinv(sqrt(E.values^2 + λ))
         mul!(solver.p, E.vectors, solver.cache)
 
-        return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
+        dec1 = -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
+
+        return dec1, dec2
     end
 
     # Linesearch
     status = opt.linesearch!(opt, x, p!, obj, stats)
 
-    # Update
-    if status
-        x .+= opt.η*solver.p
-    end
-
     # Stats
     update_λ!(stats, regularizer(opt, obj.g_norm))
 
-    return status
+    # Update
+    if status == 1
+        x .+= opt.η*solver.p
+        return true
+    elseif status == 2
+        x .+= opt.η*solver.ξ
+        return true
+    end
+
+    return false
 end
 
 #########################################################
@@ -220,6 +231,7 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     const dec_depth::R # krylov depth reduction factor
     const eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
+    ξ::S
 end
 
 """
@@ -250,7 +262,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, de
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, dim), type(undef, dim))
 end
 
 """
@@ -284,13 +296,17 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     cache2 = similar(obj.g, solver.depth)
 
     function p!()
+        dec1 = 0.0
+        dec2 = -Inf
+
         # Negative eigenstep
         if solver.eigenstep
             μ, i = findmin(E.values)
 
             if μ < 0 && obj.g_norm ≤ μ^2/opt.M
-                @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 1.0)
-                return -(2/3)*μ^3/opt.M^2
+                # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
+                @views mul!(solver.ξ, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 0.0)
+                dec2 = -(2/3)*μ^3/opt.M^2
             end
         end
         
@@ -307,7 +323,9 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
         @views mul!(solver.p, Q[:,1:solver.depth], cache2, -obj.g_norm, 0.)
         solver.p .-= s*obj.g
         
-        return -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
+        dec1 = -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
+
+        return dec1, dec2
     end
 
     # Linesearch
@@ -341,16 +359,20 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
         end
     end
 
-    # Update
-    if status
-        x .+= opt.η*solver.p
-    end
-
     # Stats
     update_λ!(stats, regularizer(opt, obj.g_norm))
     update_r!(stats, r_norm)
 
-    return status
+    # Update
+    if status == 1
+        x .+= opt.η*solver.p
+        return true
+    elseif status == 2
+        x .+= opt.η*solver.ξ
+        return true
+    end
+
+    return false
 end
 
 #########################################################
@@ -491,10 +513,11 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
 
     # Setup
     status = false
+    choice = 0
 
     # Backtracking loop
     while !status
-        dec = p!()
+        dec1, dec2 = p!()
 
         # println(norm(opt.M))
 
@@ -505,17 +528,35 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
             break
         end
 
-        stats.f_evals += 1
+        stats.f_evals += 2
 
-        if obj.f(x + opt.solver.p) - obj.fval ≤ dec
+        d1 = obj.f(x + opt.solver.p) - obj.fval
+        d2 = obj.f(x + opt.solver.ξ) - obj.fval
+
+        if d1 ≤ dec1 && d2 ≤ dec2
+            d1 ≤ d2 ? choice = 1 : choice = 2
+        elseif d1 ≤ dec1
+            choice = 1
+        elseif d2 ≤ dec2
+            choice = 2
+        end
+
+        if !iszero(choice)
             opt.M = max(opt.M*opt.M₋, eps(R)) # decrease regularization
-            status = true
+            return choice
         else
             opt.M = opt.M*opt.M₊ # increase regularization
         end
+
+        # if obj.f(x + opt.solver.p) - obj.fval ≤ dec1
+        #     opt.M = max(opt.M*opt.M₋, eps(R)) # decrease regularization
+        #     return 1
+        # else
+        #     opt.M = opt.M*opt.M₊ # increase regularization
+        # end
     end
 
-    return status
+    return 0
 end
 
 """
@@ -535,35 +576,51 @@ Perform an in-place step-size line search.
 # Returns
 - `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
 """
-function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    throw(ErrorException("Not currently implemented"))
+function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
+    dec1, dec2 = p!()
     p = opt.solver.p
+    ξ = opt.solver.ξ
     p_norm = twonorm(p)
+    ξ_norm = twonorm(ξ)
     status = true
-    λ = regularizer(opt, g_norm)
+    # λ = regularizer(opt, obj.g_norm)
     
     # Increase step-size
     η = 1.0
 
     # Scale search direction and norm
-    p .*= η
-    p_norm *= η 
+    # p .*= η
+    # p_norm *= η 
     
     # Target decrement
-    dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
+    # dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     # Check search direction
     if p_norm < sqrt(eps(R))
         status = false
     end
 
+    choice = 0
+
     # NOTE: Can we just iteratively update x, is that even that much better?
     while status
-        stats.f_evals += 1
+        stats.f_evals += 2
 
-        if obj.f(x+p) - obj.fval ≤ dec
+        d1 = obj.f(x + p) - obj.fval
+        d2 = obj.f(x + ξ) - obj.fval
+
+        # if obj.f(x+p) - obj.fval ≤ dec
+        if d1 ≤ dec1 && d2 ≤ dec2*η^2(3 - 2*η)
+            d1 ≤ d2 ? choice = 1 : choice = 2
+        elseif d1 ≤ dec1
+            choice = 1
+        elseif d2 ≤ dec2*η^2(3 - 2*η)
+            choice = 2
+        end
+        
+        if !iszero(choice)
             # Update regularization
             M_est =
                 if isone(η)
@@ -584,7 +641,8 @@ function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewton
             η *= opt.η₋ # decrease step-size
             p .*= opt.η₋ # scale search direction
             p_norm *= opt.η₋ # scale norm
-            dec *= opt.η₋^2 # scale decrement
+            ξ_norm *= opt.η₋
+            dec1 *= opt.η₋^2 # scale decrement
         end
 
         # Check step-size
@@ -593,6 +651,8 @@ function search_η!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewton
         end
     end
 
+    println(η)
+
     # Fallback to basic backtracking if linesearch failed
-    return status #|| backtrack!(opt, x, obj, stats)
+    return choice #|| backtrack!(opt, x, obj, stats)
 end
