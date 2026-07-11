@@ -588,7 +588,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     # dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     # Check search direction
-    if p_norm < sqrt(eps(R))
+    if p_norm < sqrt(eps(R)) && ξ_norm ≤ sqrt(eps(R))
+        stats.status = "Search direction too small"
         status = false
     end
 
@@ -640,6 +641,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
         # Check step-size
         if η < sqrt(eps(R))
+            stats.status = "Linesearch failure"
             status = false
         end
     end
