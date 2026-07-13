@@ -366,6 +366,8 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     elseif status == 2
         x .+= opt.η*solver.ξ
         return true
+    elseif status == 3
+        return true
     end
 
     return false
@@ -505,6 +507,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
     # Setup
     status = false
     choice = 0
+    f0 = obj.fval
 
     # Backtracking loop
     while !status
@@ -588,9 +591,12 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     # dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
     # Check search direction
-    if p_norm < sqrt(eps(R)) && ξ_norm ≤ sqrt(eps(R))
+    if p_norm < sqrt(eps(R)) && ξ_norm < sqrt(eps(R))
         stats.status = "Search direction too small"
-        status = false
+        # status = false
+        opt.M = estimate_M(x, obj, stats; samples=1)
+        status = true
+        choice = 3
     end
 
     choice = 0
@@ -606,11 +612,11 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # println(@sprintf("Negative step %.3e ≤? %.3e", d2, dec2))
 
         # if obj.f(x+p) - f0 ≤ dec
-        if d1 ≤ dec1 && d2 ≤ dec2*η^2(3 - 2*η)
+        if d1 ≤ dec1 && d2 ≤ dec2*η^2*(3 - 2*η)
             d1 ≤ d2 ? choice = 1 : choice = 2
         elseif d1 ≤ dec1
             choice = 1
-        elseif d2 ≤ dec2*η^2(3 - 2*η)
+        elseif d2 ≤ dec2*η^2*(3 - 2*η)
             choice = 2
         end
         
@@ -624,25 +630,34 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
                     opt.M/η^2
                 else
                     η*opt.M + (1-η)*estimate_M(x, obj, p ./ p_norm, stats) # re-estimate regularization
+                    # estimate_M(x, obj, stats; samples=5)
                 end
 
-            opt.M = clamp(M_est, R(1e-8), R(1e8))
+            opt.M = clamp(M_est, R(1e-16), R(1e16))
 
             # println("M Estimate: ", opt.M)
 
             break
         else
-            η *= opt.η₋ # decrease step-size
+            η *= opt.η₋ # scale step-size
+
             p .*= opt.η₋ # scale search direction
+            ξ .*= opt.η₋ # scale search direction
+
             p_norm *= opt.η₋ # scale norm
-            ξ_norm *= opt.η₋
+            ξ_norm *= opt.η₋ # scale norm
+
             dec1 *= opt.η₋^2 # scale decrement
         end
 
         # Check step-size
         if η < sqrt(eps(R))
             stats.status = "Linesearch failure"
-            status = false
+            # status = false
+            opt.M = estimate_M(x, obj, stats; samples=1)
+            status = true
+            choice = 3
+            break
         end
     end
 
