@@ -188,21 +188,15 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     end
 
     # Linesearch
-    status = opt.linesearch!(opt, x, p!, obj, stats)
+    s, status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Stats
     update_λ!(stats, regularizer(opt, obj.g_norm))
 
     # Update
-    if status == 1
-        x .+= opt.η*solver.p
-        return true
-    elseif status == 2
-        x .+= opt.η*solver.ξ
-        return true
-    end
+    x .+= s
 
-    return false
+    return status
 end
 
 #########################################################
@@ -249,7 +243,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, min_depth::Int=1, max_depth::Int=dim, inc_depth::R=1.5, dec_depth::R=0.5, eigenstep::Bool=true) where {R<:AbstractFloat}
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, max_depth::Int=dim, min_depth::Int=1, inc_depth::R=2.0, dec_depth::R=0.5, eigenstep::Bool=true) where {R<:AbstractFloat}
 
     @assert 1≤depth && depth≤dim
 
@@ -325,7 +319,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     end
 
     # Linesearch
-    status = opt.linesearch!(opt, x, p!, obj, stats)
+    s, status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Compute residual
     @views @. cache1 = E.values*E.vectors[1,:]
@@ -360,17 +354,9 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     update_r!(stats, r_norm)
 
     # Update
-    if status == 1
-        x .+= opt.η*solver.p
-        return true
-    elseif status == 2
-        x .+= opt.η*solver.ξ
-        return true
-    elseif status == 3
-        return true
-    end
+    x .+= s
 
-    return false
+    return status
 end
 
 #########################################################
@@ -468,15 +454,13 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     end
     
     # Linesearch
-    status = opt.linesearch!(opt, x, p!, obj, stats)
-
-    # Update
-    if status
-        x .+= opt.η*solver.p
-    end
+    s, status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Stats
-    update_λ!(stats, λ)
+    update_λ!(stats, regularizer(opt, obj.g_norm))
+
+    # Update
+    x .+= s
 
     return status
 end
@@ -582,6 +566,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     ξ = opt.solver.ξ
     p_norm = twonorm(p)
     ξ_norm = twonorm(ξ)
+    s = zero(p)
+    s_norm = 0
     
     # λ = regularizer(opt, obj.g_norm)
     
@@ -590,19 +576,18 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     # Target decrement
     # dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
 
-    # Check search direction
-    if p_norm < sqrt(eps(R)) && ξ_norm < sqrt(eps(R))
-        stats.status = "Search direction too small"
-        # status = false
-        opt.M = estimate_M(x, obj, stats; samples=1)
-        status = true
-        choice = 3
-    end
-
-    choice = 0
-
     # Backtrack
     while status
+
+        # Check search direction
+        if p_norm < sqrt(eps(R)) && ξ_norm < sqrt(eps(R))
+            stats.status = "Search direction too small"
+            # status = false
+            opt.M = estimate_M(x, obj, stats; samples=5)
+            break
+        end
+
+        # Check descent
         stats.f_evals += 2
 
         d1 = obj.f(x + p) - f0
@@ -612,31 +597,19 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # println(@sprintf("Negative step %.3e ≤? %.3e", d2, dec2))
 
         # if obj.f(x+p) - f0 ≤ dec
-        if d1 ≤ dec1 && d2 ≤ dec2*η^2*(3 - 2*η)
-            d1 ≤ d2 ? choice = 1 : choice = 2
-        elseif d1 ≤ dec1
-            choice = 1
+        if d1 ≤ dec1*opt.η^2 && d2 ≤ dec2*η^2*(3 - 2*η)
+            if d1 ≤ d2
+                s=p
+                s_norm = p_norm
+            else
+                s=ξ
+                s_norm = ξ_norm
+            end
+        elseif d1 ≤ dec1*opt.η^2
+            s=p
+            break
         elseif d2 ≤ dec2*η^2*(3 - 2*η)
-            choice = 2
-        end
-        
-        if !iszero(choice)
-            # Update regularization
-            M_est =
-                if isone(η)
-                    opt.M*opt.M₋ # decrease regularization
-                elseif η ≥ 0.1
-                    # opt.M*opt.M₊ # increase regularization
-                    opt.M/η^2
-                else
-                    η*opt.M + (1-η)*estimate_M(x, obj, p ./ p_norm, stats) # re-estimate regularization
-                    # estimate_M(x, obj, stats; samples=5)
-                end
-
-            opt.M = clamp(M_est, R(1e-16), R(1e16))
-
-            # println("M Estimate: ", opt.M)
-
+            s=ξ
             break
         else
             η *= opt.η₋ # scale step-size
@@ -646,23 +619,29 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
             p_norm *= opt.η₋ # scale norm
             ξ_norm *= opt.η₋ # scale norm
-
-            dec1 *= opt.η₋^2 # scale decrement
         end
+    end
 
-        # Check step-size
-        if η < sqrt(eps(R))
-            stats.status = "Linesearch failure"
-            # status = false
-            opt.M = estimate_M(x, obj, stats; samples=1)
-            status = true
-            choice = 3
-            break
-        end
+    if status
+        # Update regularization
+        M_est =
+            if isone(η)
+                opt.M*opt.M₋ # decrease regularization
+            elseif η ≥ 0.1
+                # opt.M*opt.M₊ # increase regularization
+                opt.M/η^2
+            else
+                η*opt.M + (1-η)*estimate_M(x, obj, s ./ s_norm, stats) # re-estimate regularization
+                # estimate_M(x, obj, stats; samples=5)
+            end
+
+        opt.M = clamp(M_est, R(1e-16), R(1e16))
+
+        # println("M Estimate: ", opt.M)
     end
 
     # println(η)
 
     # Fallback to basic backtracking if linesearch failed
-    return choice #|| backtrack!(opt, x, obj, stats)
+    return s, status #|| backtrack!(opt, x, obj, stats)
 end
