@@ -55,7 +55,7 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=backtrack!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -243,7 +243,7 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, max_depth::Int=dim, min_depth::Int=1, inc_depth::R=2.0, dec_depth::R=0.5, eigenstep::Bool=true) where {R<:AbstractFloat}
+function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, max_depth::Int=dim, min_depth::Int=1, inc_depth::R=1.5, dec_depth::R=0.5, eigenstep::Bool=true) where {R<:AbstractFloat}
 
     @assert 1≤depth && depth≤dim
 
@@ -597,19 +597,122 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # println(@sprintf("Negative step %.3e ≤? %.3e", d2, dec2))
 
         # if obj.f(x+p) - f0 ≤ dec
-        if d1 ≤ dec1*opt.η^2 && d2 ≤ dec2*η^2*(3 - 2*η)
+        if d1 ≤ dec1*η^2 && d2 ≤ dec2*η^2*(3 - 2*η)
             if d1 ≤ d2
                 s=p
                 s_norm = p_norm
+                break
             else
                 s=ξ
                 s_norm = ξ_norm
+                break
             end
-        elseif d1 ≤ dec1*opt.η^2
+        elseif d1 ≤ dec1*η^2
             s=p
+            s_norm = p_norm
             break
         elseif d2 ≤ dec2*η^2*(3 - 2*η)
             s=ξ
+            s_norm = ξ_norm
+            break
+        else
+            η *= opt.η₋ # scale step-size
+
+            p .*= opt.η₋ # scale search direction
+            ξ .*= opt.η₋ # scale search direction
+
+            p_norm *= opt.η₋ # scale norm
+            ξ_norm *= opt.η₋ # scale norm
+        end
+    end
+
+    if status
+        # Update regularization
+        M_est =
+            if isone(η)
+                opt.M*opt.M₋ # decrease regularization
+            elseif η ≥ 0.1
+                # opt.M*opt.M₊ # increase regularization
+                opt.M/η^2
+            else
+                η*opt.M + (1-η)*estimate_M(x, obj, s ./ s_norm, stats) # re-estimate regularization
+                # estimate_M(x, obj, stats; samples=5)
+            end
+
+        opt.M = clamp(M_est, R(1e-16), R(1e16))
+
+        # println("M Estimate: ", opt.M)
+    end
+
+    # println(η)
+
+    # Fallback to basic backtracking if linesearch failed
+    return s, status #|| backtrack!(opt, x, obj, stats)
+end
+
+function backtrack!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+    
+    # Setup
+    status = true
+    c = R(1e-4)
+
+    f0 = obj.fval
+
+    # dec1, dec2 = p!()
+    p = opt.solver.p
+    ξ = opt.solver.ξ
+    p_norm = twonorm(p)
+    ξ_norm = twonorm(ξ)
+    s = zero(p)
+    s_norm = 0
+
+    dec1, dec2 = dot(obj.g, p), dot(obj.g, ξ)
+    
+    # λ = regularizer(opt, obj.g_norm)
+    
+    η = one(R)
+    
+    # Target decrement
+    # dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
+
+    # Backtrack
+    while status
+
+        # Check search direction
+        if p_norm < sqrt(eps(R)) && ξ_norm < sqrt(eps(R))
+            stats.status = "Search direction too small"
+            # status = false
+            opt.M = estimate_M(x, obj, stats; samples=5)
+            break
+        end
+
+        # Check descent
+        stats.f_evals += 2
+
+        d1 = obj.f(x + p) - f0
+        d2 = obj.f(x + ξ) - f0
+
+        # println(@sprintf("Regular step %.3e ≤? %.3e", d1, dec1))
+        # println(@sprintf("Negative step %.3e ≤? %.3e", d2, dec2))
+
+        # if obj.f(x+p) - f0 ≤ dec
+        if d1 ≤ η*c*dec1 && d2 ≤ η*c*dec2
+            if d1 ≤ d2
+                s=p
+                s_norm = p_norm
+                break
+            else
+                s=ξ
+                s_norm = ξ_norm
+                break
+            end
+        elseif d1 ≤ dec1*η*c
+            s=p
+            s_norm=p_norm
+            break
+        elseif d2 ≤ dec2*η*c
+            s=ξ
+            s_norm=ξ_norm
             break
         else
             η *= opt.η₋ # scale step-size

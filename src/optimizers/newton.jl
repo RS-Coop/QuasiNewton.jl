@@ -234,6 +234,7 @@ function backtrack!(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::Qua
 
     # Check search direction
     if twonorm(p) < sqrt(eps(R))
+        stats.status = "Search direction too small"
         status = false
     end
 
