@@ -55,7 +55,7 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_M!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -179,7 +179,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
 
         # Update search direction
         mul!(solver.cache, E.vectors', -obj.g)
-        @. solver.cache *= pinv(sqrt(E.values^2 + λ))
+        @. solver.cache *= inv(sqrt(E.values^2 + λ))
         mul!(solver.p, E.vectors, solver.cache)
 
         dec1 = -dot(solver.p, solver.p)*sqrt(λ)*(3*sqrt(3) - 1)/6
@@ -286,6 +286,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Temporary memory, NOTE: Can you get away with just one of these?
     cache1 = similar(obj.g, solver.depth)
     cache2 = similar(obj.g, solver.depth)
+    cache3 = similar(E.values)
 
     μ, i = findmin(E.values)
 
@@ -304,10 +305,10 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
         λ = regularizer(opt, obj.g_norm)
 
         # Update search direction
-        @. E.values = pinv(sqrt(E.values^2 + λ))
-        s = pinv(sqrt(λ))
+        @. cache3 = inv(sqrt(E.values^2 + λ))
+        s = inv(sqrt(λ))
 
-        @views @. cache1 = (E.values - s)*E.vectors[1,:]
+        @views @. cache1 = (cache3 - s)*E.vectors[1,:]
         mul!(cache2, E.vectors, cache1)
 
         @views mul!(solver.p, Q[:,1:solver.depth], cache2, -obj.g_norm, 0.)
@@ -441,8 +442,8 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
         # Regularization
         λ = regularizer(opt, obj.g_norm)
 
-        @. E.values = pinv(sqrt(E.values^2 + λ))
-        s = pinv(sqrt(λ))
+        @. E.values = inv(sqrt(E.values^2 + λ))
+        s = inv(sqrt(λ))
 
         @views @. cache1 = (E.values - s)*E.vectors[1,:]
         mul!(cache2, E.vectors, cache1)
@@ -492,6 +493,10 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
     status = false
     choice = 0
     f0 = obj.fval
+    p = opt.solver.p
+    ξ = opt.solver.ξ
+
+    opt.M = 1e-8
 
     # Backtracking loop
     while !status
@@ -500,7 +505,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         # println(norm(opt.M))
 
         # NOTE: Do we need this
-        if opt.M == Inf
+        if opt.M ≥ 1e32
             stats.status = "Linesearch failure"
             status = false
             break
@@ -512,29 +517,21 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         d2 = obj.f(x + opt.solver.ξ) - f0
 
         if d1 ≤ dec1 && d2 ≤ dec2
-            d1 ≤ d2 ? choice = 1 : choice = 2
+            if d1 ≤ d2
+                return p, true
+            else
+                return ξ, true
+            end
         elseif d1 ≤ dec1
-            choice = 1
+            return p, true
         elseif d2 ≤ dec2
-            choice = 2
-        end
-
-        if !iszero(choice)
-            opt.M = max(opt.M*opt.M₋, eps(R)) # decrease regularization
-            return choice
+            return ξ, true
         else
-            opt.M = opt.M*opt.M₊ # increase regularization
+            opt.M *= 10
         end
-
-        # if obj.f(x + opt.solver.p) - f0 ≤ dec1
-        #     opt.M = max(opt.M*opt.M₋, eps(R)) # decrease regularization
-        #     return 1
-        # else
-        #     opt.M = opt.M*opt.M₊ # increase regularization
-        # end
     end
 
-    return 0
+    return similar(p), status
 end
 
 """
