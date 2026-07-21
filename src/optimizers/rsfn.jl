@@ -91,7 +91,11 @@ Perform setup operations before beginning optimization process.
 - `nothing`
 """
 @inline function setup!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    return nothing
+    # Estimate regularization
+    if isnan(opt.M)
+        M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
+        opt.M = clamp(M_est, R(1e-8), R(1e8)/obj.g_norm)
+    end
 end
 
 """
@@ -163,7 +167,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     μ, i = findmin(E.values)
 
     function p!()
-        dec1 = 0.0
+        dec1 = -Inf
         dec2 = -Inf
 
         # Negative eigenstep
@@ -172,6 +176,8 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
             @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
             solver.ξ .= -sign(dot(solver.cache, obj.g))*solver.cache
             dec2 = -(2/3)*abs(μ)^3/opt.M^2
+        else
+            solver.ξ .= zero(R)
         end
 
         # Regularization
@@ -194,7 +200,9 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     update_λ!(stats, regularizer(opt, obj.g_norm))
 
     # Update
-    x .+= s
+    if status
+        x .+= s
+    end
 
     return status
 end
@@ -276,7 +284,7 @@ Compute a single R-SFN step using `LFASolver`.
 function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(obj.H, obj.g, solver.depth, reorthogonalize=false)
+    Q, T, βₖ₊₁ = lanczos(obj.H, obj.g, solver.depth, reorthogonalize=true)
 
     update_k!(stats, solver.depth)
 
@@ -291,14 +299,20 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     μ, i = findmin(E.values)
 
     function p!()
-        dec1 = 0.0
+        dec1 = -Inf
         dec2 = -Inf
 
         # Negative eigenstep
         if solver.eigenstep && μ < 0 #&& obj.g_norm ≤ μ^2/opt.M
             # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
-            @views mul!(solver.ξ, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 0.0)
+            # @views mul!(solver.ξ, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 0.0)
+            scale = (2*abs(μ))/opt.M
+            @views mul!(solver.ξ, Q[:,1:solver.depth], E.vectors[:,i], scale, 0.0)
+            sgn = dot(solver.ξ, obj.g)
+            solver.ξ .*= -sign(sgn)
             dec2 = -(2/3)*abs(μ)^3/opt.M^2
+        else
+            solver.ξ .= zero(R)
         end
         
         # Regularization
@@ -355,7 +369,9 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     update_r!(stats, r_norm)
 
     # Update
-    x .+= s
+    if status
+        x .+= s
+    end
 
     return status
 end
@@ -461,7 +477,9 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     update_λ!(stats, regularizer(opt, obj.g_norm))
 
     # Update
-    x .+= s
+    if status
+        x .+= s
+    end
 
     return status
 end
@@ -581,7 +599,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
             stats.status = "Search direction too small"
             # status = false
             opt.M = estimate_M(x, obj, stats; samples=5)
-            break
+            return s, true
         end
 
         # Check descent

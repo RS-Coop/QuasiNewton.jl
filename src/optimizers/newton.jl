@@ -80,7 +80,11 @@ Perform setup operations before beginning optimization process.
 - `nothing`
 """
 @inline function setup!(opt::NewtonOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    return nothing
+    # Estimate regularization
+    if isnan(opt.M)
+        M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
+        opt.M = clamp(M_est, R(1e-8), R(1e8)/obj.g_norm)
+    end
 end
 
 """

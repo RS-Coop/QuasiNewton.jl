@@ -48,23 +48,19 @@ function minimize!(opt::Opt, x::S, obj::Objective; max_iter::Int, max_time::T, h
     converged = false
     iterations = 0
 
+    # Initial stats
+    update_f!(stats, obj.fval)
+    update_g!(stats, obj.g_norm)
+
     # Tolerance
     tol = opt.atol + opt.rtol*obj.g_norm
 
     # Initial check
-    obj.g_norm ≤ tol ? converged = true : converged = false
-
-    # Estimate regularization
-    if !converged && isnan(opt.M)
-        M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
-        opt.M = clamp(M_est, R(1e-8), R(1e8)/obj.g_norm)
-
-        # println("M Estimate: ", opt.M)
+    if obj.g_norm ≤ tol
+        converged = true
+        stats.converged = converged
+        return stats
     end
-
-    # Initial stats
-    update_f!(stats, obj.fval)
-    update_g!(stats, obj.g_norm)
 
     # Run setup
     setup!(opt, x, obj, stats)
