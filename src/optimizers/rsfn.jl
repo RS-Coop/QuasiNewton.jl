@@ -597,9 +597,9 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # Check search direction
         if p_norm < sqrt(eps(R)) && ξ_norm < sqrt(eps(R))
             stats.status = "Search direction too small"
-            # status = false
-            opt.M = estimate_M(x, obj, stats; samples=5)
-            return s, true
+            status = false
+            # opt.M = estimate_M(x, obj, stats; samples=5)
+            # return s, true
         end
 
         # Check descent
@@ -614,20 +614,20 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # if obj.f(x+p) - f0 ≤ dec
         if d1 ≤ dec1*η^2 && d2 ≤ dec2*η^2*(3 - 2*η)
             if d1 ≤ d2
-                s=p
+                s = p
                 s_norm = p_norm
                 break
             else
-                s=ξ
+                s = ξ
                 s_norm = ξ_norm
                 break
             end
         elseif d1 ≤ dec1*η^2
-            s=p
+            s = p
             s_norm = p_norm
             break
         elseif d2 ≤ dec2*η^2*(3 - 2*η)
-            s=ξ
+            s = ξ
             s_norm = ξ_norm
             break
         else
@@ -650,8 +650,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
                 # opt.M*opt.M₊ # increase regularization
                 opt.M/η^2
             else
-                η*opt.M + (1-η)*estimate_M(x, obj, s ./ s_norm, stats) # re-estimate regularization
-                # estimate_M(x, obj, stats; samples=5)
+                # η*opt.M + (1-η)*estimate_M(x, obj, s ./ s_norm, stats) # re-estimate regularization
+                estimate_M(x, obj, stats; samples=5)
             end
 
         opt.M = clamp(M_est, R(1e-16), R(1e16))
