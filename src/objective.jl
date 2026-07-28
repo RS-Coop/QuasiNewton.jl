@@ -115,7 +115,7 @@ NOTE: This could be more efficient if we could do block computations (e.g., Hess
 
 	M_est /= samples
 
-    return isnan(M_est) ? one(R) : min(2*M_est, R(1e8))
+    return isnan(M_est) ? one(R) : 2*M_est
 end
 
 @inline function estimate_M(x::S, obj::Objective, ζ::S, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
@@ -132,5 +132,5 @@ end
 
     M_est = twonorm(g2)/h^2
 
-	return isnan(M_est) ? one(R) : min(2*M_est, R(1e8))
+	return isnan(M_est) ? one(R) : 2*M_est
 end
