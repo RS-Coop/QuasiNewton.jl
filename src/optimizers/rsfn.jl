@@ -170,7 +170,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
 
     # Update search direction
     mul!(solver.cache, E.vectors', -obj.g)
-    @. solver.cache *= inv(sqrt(E.values^2 + λ))
+    @. solver.cache *= pinv(sqrt(E.values^2 + λ))
     mul!(solver.p, E.vectors, solver.cache)
 
     if solver.eigenstep
@@ -183,14 +183,14 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     end
 
     # Linesearch
-    s, status = opt.linesearch!(opt, x, solver.p, obj, stats)
+    η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
     # Stats
     update_λ!(stats, λ)
 
     # Update
     if status
-        x .+= s
+        @. x += η*solver.p
     end
 
     return status
@@ -219,6 +219,8 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     const inc_depth::R # krylov depth increase factor
     const dec_depth::R # krylov depth reduction factor
     const eigenstep::Bool # add eigenstep in negative eigenspace
+    const cache1::S # temporary memory
+    const cache2::S # temporary memory
     p::S # search direction
 end
 
@@ -250,7 +252,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, de
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, max_depth), type(undef, max_depth), type(undef, dim))
 end
 
 """
@@ -272,7 +274,7 @@ Compute a single R-SFN step using `LFASolver`.
 function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(obj.H, obj.g, solver.depth, reorthogonalize=true)
+    Q, T, βₖ₊₁ = lanczos(obj.H, obj.g, solver.depth, reorthogonalize=false)
 
     update_k!(stats, solver.depth)
 
@@ -282,10 +284,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Regularization
     λ = regularizer(opt, obj.g_norm)
 
-    # Temporary memory
-    cache1 = similar(obj.g, solver.depth)
-    cache2 = similar(obj.g, solver.depth)
-
+    # Reset search direction
     solver.p .= zero(R)
 
     # Negative eigenstep
@@ -298,21 +297,21 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     end
 
     # Update search direction
-    @. E.values = inv(sqrt(E.values^2 + λ))
-    s = inv(sqrt(λ))
+    @. E.values = pinv(sqrt(E.values^2 + λ))
+    s = pinv(sqrt(λ))
 
-    @views @. cache1 = (E.values - s)*E.vectors[1,:]
-    mul!(cache2, E.vectors, cache1)
+    @views @. solver.cache1[1:solver.depth] = (E.values - s)*E.vectors[1,:]
+    @views mul!(solver.cache2[1:solver.depth], E.vectors, solver.cache1[1:solver.depth])
 
-    @views mul!(solver.p, Q[:,1:solver.depth], cache2, -obj.g_norm, 1.)
+    @views mul!(solver.p, Q[:,1:solver.depth], solver.cache2[1:solver.depth], -obj.g_norm, 1.)
     solver.p .-= s*obj.g
 
     # Linesearch
-    s, status = opt.linesearch!(opt, x, solver.p, obj, stats)
+    η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
     # Compute residual
-    @views @. cache1 = E.values*E.vectors[1,:]
-    z = dot(E.vectors[solver.depth,:], cache1)
+    @views @. solver.cache1[1:solver.depth] = E.values*E.vectors[1,:]
+    @views z = dot(E.vectors[solver.depth,:], solver.cache1[1:solver.depth])
 
     r_norm = abs(obj.g_norm*βₖ₊₁*z) # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
     
@@ -344,7 +343,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
 
     # Update
     if status
-        x .+= s
+        @. x += η*solver.p
     end
 
     return status
@@ -434,8 +433,8 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     solver.p .= zero(R)
 
     # Update search direction
-    @. E.values = inv(sqrt(E.values^2 + λ))
-    s = inv(sqrt(λ))
+    @. E.values = pinv(sqrt(E.values^2 + λ))
+    s = pinv(sqrt(λ))
 
     @views @. cache1 = (E.values - s)*E.vectors[1,:]
     mul!(cache2, E.vectors, cache1)
@@ -444,14 +443,14 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     solver.p .-= s*obj.g
     
     # Linesearch
-    s, status = opt.linesearch!(opt, x, solver.p, obj, stats)
+    η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
     # Stats
     update_λ!(stats, regularizer(opt, obj.g_norm))
 
     # Update
     if status
-        x .+= s
+        @. x += η*solver.p
     end
 
     return status
@@ -503,7 +502,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
         # Check descent
         stats.f_evals += 1
 
-        if obj.f(x+p) - f0 ≤ dec*η^2
+        if obj.f(x + η*p) - f0 ≤ dec*η^2
             # Update regularization
             # M_est = estimate_M(stats, x, g, fg!, H, p, p_norm)
             opt.M =
@@ -522,14 +521,18 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
             status = true
         else
             η *= opt.η₋ # decrease step-size
-            p .*= opt.η₋ # scale search direction
             p_norm *= opt.η₋ # scale norm
+        end
+
+        if η ≤ sqrt(eps(R))
+            stats.status = "Step-size too small"
+            break
         end
     end
 
     # Fallback to basic backtracking if linesearch failed
     if status
-        return p, status
+        return η, status
     else
         return armijo!(opt, x, p, obj, stats)
     end
@@ -568,8 +571,6 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
 
     η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, one(R), f0, dot(p, obj.g))
 
-    p .*= η
-
     # Update regularization
     if !iszero(opt.M)
         opt.M =
@@ -586,5 +587,5 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
         # println("M Estimate: ", opt.M)
     end
 
-    return p, status
+    return η, status
 end
