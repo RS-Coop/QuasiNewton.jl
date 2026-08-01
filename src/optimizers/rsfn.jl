@@ -96,7 +96,7 @@ Perform setup operations before beginning optimization process.
     # Estimate regularization
     if isnan(opt.M)
         M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
-        opt.M = clamp(M_est, R(1e-8), R(1e8)/obj.g_norm)
+        opt.M = clamp(M_est, R(1e-6), R(1e6))
     end
 end
 
@@ -111,7 +111,7 @@ Compute regularization parameter for R-SFN.
 - `λ::Real`: Regularization parameter.
 """
 @inline function regularizer(opt::RSFNOptimizer, g_norm::R) where {R}
-    return iszero(opt.M) ? zero(g_norm) : max(R(opt.M)*g_norm, eps(R))
+    return iszero(opt.M) ? zero(g_norm) : clamp(R(opt.M)*g_norm, eps(R), 1e16)
 end
 
 #########################################################
@@ -505,7 +505,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
         if obj.f(x + η*p) - f0 ≤ dec*η^2
             # Update regularization
             # M_est = estimate_M(stats, x, g, fg!, H, p, p_norm)
-            opt.M =
+            M_est =
                 if isone(η)
                     opt.M*opt.M₋ # decrease regularization
                 elseif η ≥ 0.1
@@ -515,6 +515,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
                     # η*opt.M + (1-η)*estimate_M(x, obj, p ./ p_norm, stats) # re-estimate regularization
                     estimate_M(x, obj, stats; samples=5)
                 end
+
+            opt.M = clamp(M_est, 1e-12, 1e12)
 
             # println("M Estimate: ", opt.M)
 
@@ -573,7 +575,7 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
 
     # Update regularization
     if !iszero(opt.M)
-        opt.M =
+        M_est =
             if isone(η)
                 opt.M*opt.M₋ # decrease regularization
             elseif η ≥ 0.1
@@ -583,6 +585,8 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
                 # η*opt.M + (1-η)*estimate_M(x, obj, p ./ p_norm, stats) # re-estimate regularization
                 estimate_M(x, obj, stats; samples=5)
             end
+
+        opt.M = clamp(M_est, 1e-12, 1e12)
 
         # println("M Estimate: ", opt.M)
     end
