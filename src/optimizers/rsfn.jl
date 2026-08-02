@@ -509,8 +509,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
                 if isone(η)
                     opt.M*opt.M₋ # decrease regularization
                 elseif η ≥ 0.1
-                    opt.M*opt.M₊ # increase regularization
-                    # opt.M/η^2
+                    # opt.M*opt.M₊ # increase regularization
+                    opt.M/η^2
                 else
                     η*opt.M + (1-η)*estimate_M(x, obj, p ./ p_norm, stats) # re-estimate regularization
                     # estimate_M(x, obj, stats; samples=5)
@@ -579,8 +579,8 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
             if isone(η)
                 opt.M*opt.M₋ # decrease regularization
             elseif η ≥ 0.1
-                opt.M*opt.M₊ # increase regularization
-                # opt.M/η^2
+                # opt.M*opt.M₊ # increase regularization
+                opt.M/η^2
             else
                 η*opt.M + (1-η)*estimate_M(x, obj, p ./ twonorm(p), stats) # re-estimate regularization
                 # estimate_M(x, obj, stats; samples=5)
