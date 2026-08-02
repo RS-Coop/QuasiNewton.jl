@@ -68,6 +68,19 @@ function minimize!(opt::Opt, x::S, obj::Objective; max_iter::Int, max_time::T, h
     # Iterate
     while !converged && iterations ≤ max_iter
 
+        # Check
+        if obj.fval == -Inf
+            stats.status = "Function unbounded below (?)"
+            converged = true
+            break
+        elseif isnan(obj.fval)
+            stats.status = "Error in function evaluation"
+            break
+        elseif isnan(obj.g_norm)
+            stats.status = "Error in gradient evaluation"
+            break
+        end
+
         # Check gradient norm
         if obj.g_norm ≤ tol
             converged = true
