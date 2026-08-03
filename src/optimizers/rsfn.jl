@@ -57,7 +57,7 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_M!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -166,32 +166,42 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     # Eigendecomposition
     E = eigen!(Matrix!(solver.H_cache, obj.H))
 
-    # Regularization
-    λ = regularizer(opt, obj.g_norm)
+    μ, i = findmin(E.values)
 
-    # Update search direction
-    mul!(solver.cache, E.vectors', -obj.g)
-    @. solver.cache *= pinv(sqrt(E.values^2 + λ))
-    mul!(solver.p, E.vectors, solver.cache)
+    function p!()
+        # Regularization
+        λ = regularizer(opt, obj.g_norm)
 
-    if solver.eigenstep
-        μ, i = findmin(E.values)
-        if μ < 0 && 36*λ ≤ μ^2
-            # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
-            @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-            solver.p .= -sign(dot(solver.cache, obj.g))*solver.cache
+        # Update search direction
+        mul!(solver.cache, E.vectors', -obj.g)
+        @. solver.cache *= pinv(sqrt(E.values^2 + λ))
+        mul!(solver.p, E.vectors, solver.cache)
+
+        dec = twonorm(solver.p)^2*sqrt(λ)*(1-3*sqrt(3))/6
+
+        if solver.eigenstep
+            if μ < 0 && 36*λ ≤ μ^2
+                @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
+                solver.p .= -sign(dot(solver.cache, obj.g))*solver.cache
+
+                dec = -abs(μ)^3 / (3*opt.M^2)
+            end
         end
+
+        return solver.p, dec
     end
 
     # Linesearch
-    η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
+    status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Stats
-    update_λ!(stats, λ)
+    update_λ!(stats, regularizer(opt, obj.g_norm))
 
     # Update
     if status
-        @. x += η*solver.p
+        @. x += solver.p
+    else
+        stats.status = "Linesearch failure"
     end
 
     return status
@@ -282,11 +292,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Symmetric tridgiagonal eigendecomposition
     E = Eigen(LAPACK.stev!('V', T.dv, T.ev)...)
 
-    # Regularization
-    λ = regularizer(opt, obj.g_norm)
-
-    # Reset search direction
-    solver.p .= zero(R)
+    μ, i = findmin(E.values)
 
     # views
     Qk = @view Q[:,1:solver.depth]
@@ -294,27 +300,35 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     cache1 = @view solver.cache1[1:solver.depth]
     cache2 = @view solver.cache2[1:solver.depth]
 
-    # Negative eigenstep
-    if solver.eigenstep
-        μ, i = findmin(E.values)
-        if μ < 0 && 36*λ ≤ μ^2
-            # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
-            @views mul!(solver.p, Qk, E.vectors[:,i], -sign(v1[i])*(2*abs(μ)/opt.M), 0.0)
+    function p!()
+        # Regularization
+        λ = regularizer(opt, obj.g_norm)
+
+        # Update search direction
+        s = pinv(sqrt(λ))
+
+        @. cache1 = (pinv(sqrt(E.values^2 + λ)) - s)*v1
+        mul!(cache2, E.vectors, cache1)
+
+        mul!(solver.p, Qk, cache2, -obj.g_norm, 0.)
+        solver.p .-= s*obj.g
+
+        dec = twonorm(solver.p)^2*sqrt(λ)*(1-3*sqrt(3))/6
+
+        # Negative eigenstep
+        if solver.eigenstep
+            if μ < 0 && 36*λ ≤ μ^2
+                @views mul!(solver.p, Qk, E.vectors[:,i], -sign(v1[i])*(2*abs(μ)/opt.M), 1.0)
+                
+                dec = -abs(μ)^3 / (3*opt.M^2)
+            end
         end
+
+        return solver.p, dec
     end
 
-    # Update search direction
-    @. E.values = pinv(sqrt(E.values^2 + λ))
-    s = pinv(sqrt(λ))
-
-    @. cache1 = (E.values - s)*v1
-    mul!(cache2, E.vectors, cache1)
-
-    mul!(solver.p, Qk, cache2, -obj.g_norm, 1.)
-    solver.p .-= s*obj.g
-
     # Linesearch
-    η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
+    status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Compute residual
     @. cache1 = E.values*v1
@@ -350,7 +364,9 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
 
     # Update
     if status
-        @. x += η*solver.p
+        @. x += solver.p
+    else
+        stats.status = "Linesearch failure"
     end
 
     return status
@@ -466,6 +482,26 @@ end
 #########################################################
 # Backtracking linesearch
 #########################################################
+
+function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+
+    # Setup
+    status = false
+    f0 = obj.fval
+
+    # 
+    for M in 10.0 .^ (-8:8)
+        opt.M = M
+        p, dec = p!()
+
+        if obj.f(x + p) - f0 ≤ dec
+            status = true
+            break
+        end
+    end
+
+    return status
+end
 
 """
 Perform an in-place step-size line search.
