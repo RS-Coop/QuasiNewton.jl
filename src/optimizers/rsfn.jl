@@ -489,6 +489,8 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
     status = false
     f0 = obj.fval
 
+    M_prev = opt.M
+
     # 
     for M in 10.0 .^ (-8:8)
         opt.M = M
@@ -500,7 +502,15 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         end
     end
 
-    return status
+    if status
+        return status
+    else
+        opt.M = M_prev
+        p, _ = p!()
+        η, status = armijo!(opt, x, p, obj, stats)
+        p .*= η
+        return status
+    end
 end
 
 """
