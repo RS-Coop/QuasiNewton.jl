@@ -47,6 +47,12 @@ Form the full Hessian matrix from a Hessian-vector product operator.
 	n = size(H, 1)
 	H_mat = Matrix{R}(undef, n, n)
 
+	return Matrix!(H_mat, H)
+end
+
+@inline function Matrix!(H_mat::Matrix{R}, H::HvpOperator{R}) where {R}
+	n = size(H, 1)
+
 	ei = zeros(R, n)
 
 	@inbounds for i = 1:n

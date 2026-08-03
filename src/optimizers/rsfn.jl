@@ -125,10 +125,11 @@ Full eigendecomposition R-SFN search direction solver.
 - `p::Vector`: Search direction.
 - `cache::Vector`: Temporary memory.
 """
-mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}}  <: QuasiNewtonSolver
-    cache::S # temporary memory
+mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}, M<:AbstractMatrix{<:AbstractFloat}}  <: QuasiNewtonSolver
     const eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
+    cache::S # temporary memory
+    H_cache::M # temporary Hessian memory
 end
 
 """
@@ -141,8 +142,8 @@ Constructor for `EigenSolver`.
 # Returns
 - `EigenSolver` instance.
 """
-function EigenSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, eigenstep::Bool=false)
-    return EigenSolver(type(undef, dim), eigenstep, type(undef, dim))
+function EigenSolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, eigenstep::Bool=false) where {R<:AbstractFloat}
+    return EigenSolver(eigenstep, type(undef, dim), type(undef, dim), Matrix{R}(undef, dim, dim))
 end
 
 """
@@ -163,7 +164,7 @@ Compute a single R-SFN step using `EigenSolver`.
 function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Eigendecomposition
-    E = eigen!(Matrix(obj.H))
+    E = eigen!(Matrix!(solver.H_cache, obj.H))
 
     # Regularization
     λ = regularizer(opt, obj.g_norm)
@@ -287,12 +288,18 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Reset search direction
     solver.p .= zero(R)
 
+    # views
+    Qk = @view Q[:,1:solver.depth]
+    v1 = @view E.vectors[1,:]
+    cache1 = @view solver.cache1[1:solver.depth]
+    cache2 = @view solver.cache2[1:solver.depth]
+
     # Negative eigenstep
     if solver.eigenstep
         μ, i = findmin(E.values)
         if μ < 0 && 36*λ ≤ μ^2
             # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
-            @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 0.0)
+            @views mul!(solver.p, Qk, E.vectors[:,i], -sign(v1[i])*(2*abs(μ)/opt.M), 0.0)
         end
     end
 
@@ -300,18 +307,18 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     @. E.values = pinv(sqrt(E.values^2 + λ))
     s = pinv(sqrt(λ))
 
-    @views @. solver.cache1[1:solver.depth] = (E.values - s)*E.vectors[1,:]
-    @views mul!(solver.cache2[1:solver.depth], E.vectors, solver.cache1[1:solver.depth])
+    @. cache1 = (E.values - s)*v1
+    mul!(cache2, E.vectors, cache1)
 
-    @views mul!(solver.p, Q[:,1:solver.depth], solver.cache2[1:solver.depth], -obj.g_norm, 1.)
+    mul!(solver.p, Qk, cache2, -obj.g_norm, 1.)
     solver.p .-= s*obj.g
 
     # Linesearch
     η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
     # Compute residual
-    @views @. solver.cache1[1:solver.depth] = E.values*E.vectors[1,:]
-    @views z = dot(E.vectors[solver.depth,:], solver.cache1[1:solver.depth])
+    @. cache1 = E.values*v1
+    @views z = dot(E.vectors[solver.depth,:], cache1)
 
     r_norm = abs(obj.g_norm*βₖ₊₁*z) # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
     
@@ -436,7 +443,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     @. E.values = pinv(sqrt(E.values^2 + λ))
     s = pinv(sqrt(λ))
 
-    @views @. cache1 = (E.values - s)*E.vectors[1,:]
+    @views @. cache1 = (E.values - s)*v1
     mul!(cache2, E.vectors, cache1)
 
     @views mul!(solver.p, Q, cache2, -B1[1,1], 1.)
