@@ -175,7 +175,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
 
     if solver.eigenstep
         μ, i = findmin(E.values)
-        if μ < 0 && obj.g_norm ≤ μ^2/opt.M
+        if μ < 0 && 36*λ ≤ μ^2
             # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
             @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
             solver.p .= -sign(dot(solver.cache, obj.g))*solver.cache
@@ -290,7 +290,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Negative eigenstep
     if solver.eigenstep
         μ, i = findmin(E.values)
-        if μ < 0 && obj.g_norm ≤ μ^2/opt.M
+        if μ < 0 && 36*λ ≤ μ^2
             # println(@sprintf("Negative step %.3e ≤ %.3e", obj.g_norm, μ^2/opt.M))
             @views mul!(solver.p, Q[:,1:solver.depth], E.vectors[:,i], -sign(E.vectors[1,i])*(2*abs(μ)/opt.M), 0.0)
         end
@@ -494,7 +494,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
     while !status
 
         # Check search direction
-        if p_norm < sqrt(eps(R))
+        if η*p_norm < sqrt(eps(R))
             stats.status = "Search direction too small"
             break
         end
@@ -523,7 +523,6 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
             status = true
         else
             η *= opt.η₋ # decrease step-size
-            p_norm *= opt.η₋ # scale norm
         end
 
         if η ≤ sqrt(eps(R))
