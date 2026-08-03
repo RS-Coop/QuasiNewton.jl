@@ -57,7 +57,7 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_M!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -330,8 +330,10 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Linesearch
     status = opt.linesearch!(opt, x, p!, obj, stats)
 
+    λ = regularizer(opt, obj.g_norm)
+
     # Compute residual
-    @. cache1 = E.values*v1
+    @. cache1 = pinv(sqrt(E.values^2 + λ))*v1 # NOTE: Can we just go ahead and reuse?
     @views z = dot(E.vectors[solver.depth,:], cache1)
 
     r_norm = abs(obj.g_norm*βₖ₊₁*z) # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
@@ -359,7 +361,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     end
 
     # Stats
-    update_λ!(stats, regularizer(opt, obj.g_norm))
+    update_λ!(stats, λ)
     update_r!(stats, r_norm)
 
     # Update
@@ -529,18 +531,15 @@ Perform an in-place step-size line search.
 # Returns
 - `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
 """
-function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
     status = false
-
     f0 = obj.fval
-
-    λ = regularizer(opt, obj.g_norm)
-    p_norm = twonorm(p)
-    dec = p_norm^2*sqrt(λ)*(1-3*sqrt(3))/6
-
     η = one(R)
+
+    p, dec = p!()
+    p_norm = twonorm(p)
 
     # Backtrack
     while !status
@@ -585,9 +584,13 @@ function search_η!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::Quasi
 
     # Fallback to basic backtracking if linesearch failed
     if status
-        return η, status
+        p .*= η
+        return status
     else
-        return armijo!(opt, x, p, obj, stats)
+        stats.status = "Falling back to Armijo"
+        η, status = armijo!(opt, x, p, obj, stats)
+        p .*= η
+        return status
     end
 end
 
