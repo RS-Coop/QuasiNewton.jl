@@ -492,7 +492,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
     f0 = obj.fval
 
     # 
-    for M in 10.0 .^ (-8:8)
+    for M in 10.0 .^ (-12:12)
         opt.M = M
         p, dec = p!()
 
@@ -545,7 +545,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     while !status
 
         # Check search direction
-        if η*p_norm < sqrt(eps(R))
+        if η*p_norm ≤ sqrt(eps(R))
             stats.status = "Search direction too small"
             break
         end
