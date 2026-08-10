@@ -195,7 +195,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Stats
-    update_λ!(stats, regularizer(opt, obj.g_norm))
+    update_M!(stats, opt.M)
 
     # Update
     if status
@@ -330,10 +330,8 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Linesearch
     status = opt.linesearch!(opt, x, p!, obj, stats)
 
-    λ = regularizer(opt, obj.g_norm)
-
     # Compute residual
-    @. cache1 = pinv(sqrt(E.values^2 + λ))*v1 # NOTE: Can we just go ahead and reuse?
+    # @. cache1 = pinv(sqrt(E.values^2 + λ))*v1 # NOTE: Can we just go ahead and reuse?
     @views z = dot(E.vectors[solver.depth,:], cache1)
 
     r_norm = abs(obj.g_norm*βₖ₊₁*z) # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
@@ -361,7 +359,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     end
 
     # Stats
-    update_λ!(stats, λ)
+    update_M!(stats, opt.M)
     update_r!(stats, r_norm)
 
     # Update
@@ -433,6 +431,8 @@ Compute a single R-SFN step using `BlockLFASolver`.
 """
 function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
+    error("Block LFA not implemented")
+
     # Block Lanczos + eigendecomposition
     @views solver.Ω[:,1] = obj.g
 
@@ -471,7 +471,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
     # Stats
-    update_λ!(stats, regularizer(opt, obj.g_norm))
+    update_M!(stats, opt.M)
 
     # Update
     if status
@@ -491,12 +491,16 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
     status = false
     f0 = obj.fval
 
+    s = similar(x)
+
     # 
     for M in 10.0 .^ (-12:12)
         opt.M = M
         p, dec = p!()
 
-        if obj.f(x + p) - f0 ≤ dec
+        s .= x + p
+
+        if obj.f(s) - f0 ≤ dec
             status = true
             break
         end
@@ -541,6 +545,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     p, dec = p!()
     p_norm = twonorm(p)
 
+    s = similar(x)
+
     # Backtrack
     while !status
 
@@ -553,7 +559,9 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # Check descent
         stats.f_evals += 1
 
-        if obj.f(x + η*p) - f0 ≤ dec*η^2
+        s .= x + η*p
+
+        if obj.f(s) - f0 ≤ dec*η^2
             # Update regularization
             # M_est = estimate_M(stats, x, g, fg!, H, p, p_norm)
             M_est =
@@ -563,7 +571,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
                     # opt.M*opt.M₊ # increase regularization
                     opt.M/η^2
                 else
-                    η*opt.M + (1-η)*estimate_M(x, obj, p ./ p_norm, stats) # re-estimate regularization
+                    @. s = p / p_norm
+                    η*opt.M + (1-η)*estimate_M(x, obj, s, stats) # re-estimate regularization
                     # estimate_M(x, obj, stats; samples=5)
                 end
 
@@ -601,14 +610,18 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
 
     f0 = obj.fval
 
+    s = similar(x)
+
     function ϕ(t)
         stats.f_evals += 1
-        return obj.f(x + t*p)
+        s .= x + t*p
+        return obj.f(s)
     end
 
     function dϕ(t)
         stats.f_evals += 1
-        obj.fg!(obj.g, x + t*p)
+        s .= x + t*p
+        obj.fg!(obj.g, s)
         
         stats.g_evals += 1
 
@@ -617,7 +630,8 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
 
     function ϕdϕ(t)
         stats.f_evals += 1
-        phi = obj.fg!(obj.g, x + t*p)
+        s .= x + t*p
+        phi = obj.fg!(obj.g, s)
 
         stats.g_evals += 1
 
@@ -636,7 +650,9 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
                 # opt.M*opt.M₊ # increase regularization
                 opt.M/η^2
             else
-                η*opt.M + (1-η)*estimate_M(x, obj, p ./ twonorm(p), stats) # re-estimate regularization
+                s .= p
+                normalize!(s)
+                η*opt.M + (1-η)*estimate_M(x, obj, s, stats) # re-estimate regularization
                 # estimate_M(x, obj, stats; samples=5)
             end
 

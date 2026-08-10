@@ -204,7 +204,7 @@ function step!(opt::ARCOptimizer, solver::ARCSolver, x::S, obj::Objective, stats
         else
             status = true
 
-            update_λ!(stats, solver.shifts[j])
+            update_M!(stats, solver.shifts[j])
             update_r!(stats, solver.workspace.rNorms[j])
 
             # Update

@@ -172,7 +172,7 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective,
     # Regularization
     λ = regularizer(opt, obj.g_norm)
 
-    update_λ!(stats, λ)
+    update_M!(stats, opt.M)
 
     # Tolerance
     ζ = 0.5

@@ -21,7 +21,7 @@ mutable struct QuasiNewtonStats{R<:Real}
     f_seq::Vector{R} # function value sequence
     g_seq::Vector{R} # gradient norm sequence
     r_seq::Vector{Union{R,Missing}} # residual norm sequence
-    λ_seq::Vector{Union{R,Missing}} # regularization tracking
+    M_seq::Vector{Union{R,Missing}} # regularization tracking
     k_seq::Vector{Union{Int,Missing}} # number of Krylov iterations
     status::String # exit status
 
@@ -51,8 +51,8 @@ function update_r!(stats::QuasiNewtonStats, val::R) where {R}
     return nothing
 end
 
-function update_λ!(stats::QuasiNewtonStats, val::R) where {R}
-    stats.history ? push!(stats.λ_seq, val) : nothing
+function update_M!(stats::QuasiNewtonStats, val::R) where {R}
+    stats.history ? push!(stats.M_seq, val) : nothing
     return nothing
 end
 
@@ -85,8 +85,8 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     println()
 
     @printf(io, "Regularization:\n")
-    printstat(io, "           Max:", maximum_or_missing(stats.λ_seq))
-    printstat(io, "           Avg:", mean_or_missing(stats.λ_seq))
+    printstat(io, "           Max:", maximum_or_missing(stats.M_seq))
+    printstat(io, "           Avg:", mean_or_missing(stats.M_seq))
     println()
 
     @printf(io, "Krylov Iterations:\n")
