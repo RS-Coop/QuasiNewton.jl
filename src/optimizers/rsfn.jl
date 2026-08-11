@@ -12,6 +12,10 @@ include("lanczos.jl")
 # R-SFN Optimizer
 #########################################################
 
+
+const ρ_GLOBAL = (1-3*sqrt(3))/6
+const ρ_LOCAL = -395/1296
+
 """
 Regularized Saddle-Free Newton (R-SFN) optimizer.
 
@@ -66,7 +70,7 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
     # Linesearch parameters
     if isnothing(linesearch) || iszero(M)
         @assert 0<η && η≤1
-        linesearch = (args...) -> return η
+        linesearch = fixed_step!
     else
         @assert 0<η₋ && η₋<1
     end
@@ -98,6 +102,8 @@ Perform setup operations before beginning optimization process.
         M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
         opt.M = clamp(M_est, R(1e-6), R(1e6))
     end
+
+    return nothing
 end
 
 """
@@ -110,8 +116,8 @@ Compute regularization parameter for R-SFN.
 # Returns
 - `λ::Real`: Regularization parameter.
 """
-@inline function regularizer(opt::RSFNOptimizer, g_norm::R) where {R}
-    return iszero(opt.M) ? zero(g_norm) : clamp(R(opt.M)*g_norm, eps(R), 1e16)
+@inline function regularizer(M::R, g_norm::R) where {R}
+    return iszero(M) ? zero(R) : clamp(M*g_norm, eps(R), R(1e16))
 end
 
 #########################################################
@@ -125,8 +131,8 @@ Full eigendecomposition R-SFN search direction solver.
 - `p::Vector`: Search direction.
 - `cache::Vector`: Temporary memory.
 """
-mutable struct EigenSolver{S<:AbstractVector{<:AbstractFloat}, M<:AbstractMatrix{<:AbstractFloat}}  <: QuasiNewtonSolver
-    const eigenstep::Bool # add eigenstep in negative eigenspace
+struct EigenSolver{S<:AbstractVector{<:AbstractFloat}, M<:AbstractMatrix{<:AbstractFloat}}  <: QuasiNewtonSolver
+    eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
     cache::S # temporary memory
     H_cache::M # temporary Hessian memory
@@ -168,24 +174,29 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
 
     μ, i = findmin(E.values)
 
-    function p!()
+    # 
+    vi = @view E.vectors[:,i]
+
+    #
+    function p!(M::R=opt.M)
         # Regularization
-        λ = regularizer(opt, obj.g_norm)
+        λ = regularizer(M, obj.g_norm)
 
         # Update search direction
         mul!(solver.cache, E.vectors', -obj.g)
+
+        α = solver.cache[i] # save this inner product for later
+
         @. solver.cache *= pinv(sqrt(E.values^2 + λ))
         mul!(solver.p, E.vectors, solver.cache)
 
-        dec = twonorm(solver.p)^2*sqrt(λ)*(1-3*sqrt(3))/6
-
-        if solver.eigenstep
-            if μ < 0 && 36*λ ≤ μ^2
-                @views solver.cache .= (2*abs(μ)/opt.M)*E.vectors[:,i]
-                solver.p .= -sign(dot(solver.cache, obj.g))*solver.cache
-
-                dec = -abs(μ)^3 / (3*opt.M^2)
-            end
+        # 
+        if solver.eigenstep && M > 0 && μ < 0 && 36*λ ≤ μ^2
+            sgn = α ≥ 0 ? one(R) : -one(R)
+            axpy!(sgn*2*abs(μ)/M, vi, solver.p)
+            dec = ρ_LOCAL * abs(μ)^3 / M^2
+        else
+            dec = ρ_GLOBAL * dot(solver.p, solver.p) * sqrt(λ)
         end
 
         return solver.p, dec
@@ -230,9 +241,9 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     const inc_depth::R # krylov depth increase factor
     const dec_depth::R # krylov depth reduction factor
     const eigenstep::Bool # add eigenstep in negative eigenspace
+    const p::S # search direction
     const cache1::S # temporary memory
     const cache2::S # temporary memory
-    p::S # search direction
 end
 
 """
@@ -263,7 +274,7 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, de
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, max_depth), type(undef, max_depth), type(undef, dim))
+    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, dim), type(undef, max_depth), type(undef, max_depth))
 end
 
 """
@@ -295,33 +306,31 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     μ, i = findmin(E.values)
 
     # views
-    Qk = @view Q[:,1:solver.depth]
-    v1 = @view E.vectors[1,:]
+    Q = @view Q[:,1:solver.depth] # NOTE: Getting rid of q_{k+1} since we aren't using it in the residual
+    v1 = @view E.vectors[1,:] # NOTE: This is the first entry of each eigenvector
+    vi = @view E.vectors[:,i]
     cache1 = @view solver.cache1[1:solver.depth]
     cache2 = @view solver.cache2[1:solver.depth]
 
-    function p!()
+    function p!(M::R)
         # Regularization
-        λ = regularizer(opt, obj.g_norm)
+        λ = regularizer(M, obj.g_norm)
 
         # Update search direction
         s = pinv(sqrt(λ))
 
         @. cache1 = (pinv(sqrt(E.values^2 + λ)) - s)*v1
         mul!(cache2, E.vectors, cache1)
-
-        mul!(solver.p, Qk, cache2, -obj.g_norm, 0.)
-        solver.p .-= s*obj.g
-
-        dec = twonorm(solver.p)^2*sqrt(λ)*(1-3*sqrt(3))/6
+        mul!(solver.p, Q, cache2, -obj.g_norm, zero(R))
+        axpy!(-s, obj.g, solver.p)
 
         # Negative eigenstep
-        if solver.eigenstep
-            if μ < 0 && 36*λ ≤ μ^2
-                @views mul!(solver.p, Qk, E.vectors[:,i], -sign(v1[i])*(2*abs(μ)/opt.M), 1.0)
-                
-                dec = -abs(μ)^3 / (3*opt.M^2)
-            end
+        if solver.eigenstep && M > 0 && μ < 0 && 36*λ ≤ μ^2
+            sgn = vi[1] ≥ 0 ? one(R) : -one(R)
+            mul!(solver.p, Q, vi, -sgn*2*abs(μ)/M, one(R))
+            dec = ρ_LOCAL * abs(μ)^3 / M^2
+        else
+            dec = ρ_GLOBAL * dot(solver.p, solver.p) * sqrt(λ)
         end
 
         return solver.p, dec
@@ -331,7 +340,6 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     status = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Compute residual
-    # @. cache1 = pinv(sqrt(E.values^2 + λ))*v1 # NOTE: Can we just go ahead and reuse?
     @views z = dot(E.vectors[solver.depth,:], cache1)
 
     r_norm = abs(obj.g_norm*βₖ₊₁*z) # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
@@ -387,10 +395,10 @@ Block Lanczos R-SFN search direction solver.
 """
 mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}  <: QuasiNewtonSolver
     depth::Int # krylov depth
-    block_size::Int # krylov block size
-    Ω::M # block RHS
+    const block_size::Int # krylov block size
+    const Ω::M # block RHS
     const enrichment::Bool
-    p::S # search direction
+    const p::S # search direction
 end
 
 """
@@ -485,6 +493,13 @@ end
 # Backtracking linesearch
 #########################################################
 
+
+function fixed_step!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+    p, _ = p!(opt.M)
+    p .*= opt.η
+    return true
+end
+
 function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
@@ -494,13 +509,16 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
     s = similar(x)
 
     # 
-    for M in 10.0 .^ (-12:12)
-        opt.M = M
-        p, dec = p!()
+    for M in R(10) .^ (-12:12)
+        p, dec = p!(M)
 
-        s .= x + p
+        # Check descent
+        stats.f_evals += 1
+
+        @. s = x + p
 
         if obj.f(s) - f0 ≤ dec
+            opt.M = M
             status = true
             break
         end
@@ -510,10 +528,12 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         return status
     else
         stats.status = "Falling back to Armijo"
-        opt.M = 1e0
-        p, _ = p!()
+
+        p, _ = p!(one(R))
+
         η, status = armijo!(opt, x, p, obj, stats)
         p .*= η
+
         return status
     end
 end
@@ -542,7 +562,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     f0 = obj.fval
     η = one(R)
 
-    p, dec = p!()
+    p, dec = p!(opt.M)
     p_norm = twonorm(p)
 
     s = similar(x)
@@ -559,7 +579,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # Check descent
         stats.f_evals += 1
 
-        s .= x + η*p
+        @. s = x + η*p
 
         if obj.f(s) - f0 ≤ dec*η^2
             # Update regularization
@@ -572,7 +592,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
                     opt.M/η^2
                 else
                     @. s = p / p_norm
-                    η*opt.M + (1-η)*estimate_M(x, obj, s, stats) # re-estimate regularization
+                    estimate_M(x, obj, s, stats) # re-estimate regularization
                     # estimate_M(x, obj, stats; samples=5)
                 end
 

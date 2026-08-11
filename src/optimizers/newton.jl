@@ -85,6 +85,8 @@ Perform setup operations before beginning optimization process.
         M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
         opt.M = clamp(M_est, R(1e-8), R(1e8)/obj.g_norm)
     end
+
+    return nothing
 end
 
 """
@@ -97,8 +99,8 @@ Compute regularization parameter for Newton optimizer.
 # Returns
 - `λ::Real`: Regularization parameter.
 """
-@inline function regularizer(opt::NewtonOptimizer, g_norm::R) where {R}
-    return iszero(opt.M) ? zero(g_norm) : max(sqrt(R(opt.M)*g_norm), eps(R))
+@inline function regularizer(M::R, g_norm::R) where {R}
+    return iszero(M) ? zero(R) : clamp(sqrt(M*g_norm), eps(R), R(1e16))
 end
 
 #########################################################
@@ -170,7 +172,7 @@ Compute a single Newton step using `NewtonSolver`.
 function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Regularization
-    λ = regularizer(opt, obj.g_norm)
+    λ = regularizer(opt.M, obj.g_norm)
 
     update_M!(stats, opt.M)
 
