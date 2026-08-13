@@ -121,6 +121,8 @@ end
 @inline function estimate_M(x::S, obj::Objective, ζ::S, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     h = eps(R)^(1/3)*max(one(R), norm(x))
 
+    normalize!(ζ)
+
     g2 = similar(x)
     obj.fg!(g2, @. x + h*ζ)
     stats.g_evals += 1
