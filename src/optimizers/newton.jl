@@ -54,7 +54,7 @@ function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=b
 
     # Linesearch parameters
     if isnothing(linesearch)
-        @assert 0<η && η≤1
+        @assert 0 < η && η ≤ 1
         linesearch = (args...) -> return η
     end
 
@@ -99,7 +99,7 @@ Compute regularization parameter for Newton optimizer.
 # Returns
 - `λ::Real`: Regularization parameter.
 """
-@inline function regularizer(M::R, g_norm::R) where {R}
+@inline function regularizer(opt::NewtonOptimizer, M::R, g_norm::R) where {R<:AbstractFloat}
     return iszero(M) ? zero(R) : clamp(sqrt(M*g_norm), eps(R), R(1e16))
 end
 
@@ -172,7 +172,7 @@ Compute a single Newton step using `NewtonSolver`.
 function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Regularization
-    λ = regularizer(opt.M, obj.g_norm)
+    λ = regularizer(opt, opt.M, obj.g_norm)
 
     update_M!(stats, opt.M)
 

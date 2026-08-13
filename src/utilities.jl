@@ -1,7 +1,7 @@
 #=
 Author: Cooper Simpson
 
-SFN optimizer stats
+QuasiNewton optimizer stats
 =#
 
 using Statistics: mean
@@ -20,9 +20,9 @@ mutable struct QuasiNewtonStats{R<:Real}
     hvp_evals::Int # number of hvp evaluations
     f_seq::Vector{R} # function value sequence
     g_seq::Vector{R} # gradient norm sequence
-    r_seq::Vector{Union{R,Missing}} # residual norm sequence
     M_seq::Vector{Union{R,Missing}} # regularization tracking
     k_seq::Vector{Union{Int,Missing}} # number of Krylov iterations
+    r_seq::Vector{Union{R,Missing}} # residual norm sequence
     status::String # exit status
 
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
@@ -30,8 +30,8 @@ mutable struct QuasiNewtonStats{R<:Real}
                         0, 0.0, 0, 0, 0,
                         Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)), 
                         history ? R[] : Union{R,Missing}[missing],
-                        history ? R[] : Union{R,Missing}[missing],
                         history ? Int[] : Union{Int,Missing}[missing],
+                        history ? R[] : Union{R,Missing}[missing],
                         "Nominal")
     end
 end
@@ -46,11 +46,6 @@ function update_g!(stats::QuasiNewtonStats, val::R) where {R}
     return nothing
 end
 
-function update_r!(stats::QuasiNewtonStats, val::R) where {R}
-    stats.history ? push!(stats.r_seq, val) : nothing
-    return nothing
-end
-
 function update_M!(stats::QuasiNewtonStats, val::R) where {R}
     stats.history ? push!(stats.M_seq, val) : nothing
     return nothing
@@ -58,6 +53,11 @@ end
 
 function update_k!(stats::QuasiNewtonStats, val::Int)
     stats.history ? push!(stats.k_seq, val) : nothing
+    return nothing
+end
+
+function update_r!(stats::QuasiNewtonStats, val::R) where {R}
+    stats.history ? push!(stats.r_seq, val) : nothing
     return nothing
 end
 
@@ -78,13 +78,8 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "    Hessian:             %9d\n", stats.hvp_evals)
 
     println()
-    
-    @printf(io, "Residual Norm:\n")
-    printstat(io, "          Max:", maximum_or_missing(stats.r_seq))
-    printstat(io, "          Avg:", mean_or_missing(stats.r_seq))
-    println()
 
-    @printf(io, "Regularization:\n")
+    @printf(io, "Est. Hessian Lipschitz Constant:\n")
     printstat(io, "           Max:", maximum_or_missing(stats.M_seq))
     printstat(io, "           Avg:", mean_or_missing(stats.M_seq))
     println()
@@ -92,6 +87,11 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "Krylov Iterations:\n")
     printstat(io, "              Max:", maximum_or_missing(stats.k_seq))
     printstat(io, "              Avg:", mean_or_missing(stats.k_seq))
+    println()
+
+    @printf(io, "Residual Norm:\n")
+    printstat(io, "          Max:", maximum_or_missing(stats.r_seq))
+    printstat(io, "          Avg:", mean_or_missing(stats.r_seq))
     println()
 
     @printf(io, "Status: %26s\n", stats.status)

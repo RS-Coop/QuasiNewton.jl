@@ -52,9 +52,9 @@ Constructor for `ARCOptimizer`.
 function ARCOptimizer(dim::Int; solver::Solver=ARCSolver, M::R1=10.0, η1::R2=0.1, η2::R2=0.75, γ1::R2=0.1, γ2::R2=5.0, atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, R2<:AbstractFloat}
 
     #
-    @assert 0<M
-    @assert 0<η1 && η1<η2 && η2<1
-    @assert 0<γ1 && γ1<1 && 1<γ2
+    @assert 0 < M
+    @assert 0 < η1 && η1 < η2 && η2 < 1
+    @assert 0 < γ1 && γ1 < 1 && 1 < γ2
 
     solver_ = solver(dim; kwargs...)
 

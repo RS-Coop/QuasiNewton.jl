@@ -64,15 +64,15 @@ Constructor for `RSFNOptimizer`.
 function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
-    @assert isnan(M) || 0≤M
-    @assert 1<M₊ && 0<M₋ && M₋<1
+    @assert isnan(M) || 0 ≤ M
+    @assert 1 ≤ M₊ && 0 < M₋ && M₋ ≤ 1
 
     # Linesearch parameters
     if isnothing(linesearch) || iszero(M)
-        @assert 0<η && η≤1
+        @assert 0 < η && η ≤ 1
         linesearch = fixed_step!
     else
-        @assert 0<η₋ && η₋<1
+        @assert 0 < η₋ && η₋ < 1
     end
 
     # Solver
@@ -116,7 +116,7 @@ Compute regularization parameter for R-SFN.
 # Returns
 - `λ::Real`: Regularization parameter.
 """
-@inline function regularizer(M::R, g_norm::R) where {R}
+@inline function regularizer(opt::RSFNOptimizer, M::R, g_norm::R) where {R<:AbstractFloat}
     return iszero(M) ? zero(R) : clamp(M*g_norm, eps(R), R(1e16))
 end
 
@@ -180,7 +180,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     #
     function p!(M::R=opt.M)
         # Regularization
-        λ = regularizer(M, obj.g_norm)
+        λ = regularizer(opt, M, obj.g_norm)
 
         # Update search direction
         mul!(solver.cache, E.vectors', -obj.g)
@@ -203,14 +203,14 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     end
 
     # Linesearch
-    status = opt.linesearch!(opt, x, p!, obj, stats)
+    status, η, M = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Stats
-    update_M!(stats, opt.M)
+    update_M!(stats, M)
 
     # Update
     if status
-        @. x += solver.p
+        @. x += η*solver.p
     else
         stats.status = "Linesearch failure"
     end
@@ -268,8 +268,8 @@ function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, de
     @assert 1≤depth && depth≤dim
 
     if adapt
-        @assert 1≤min_depth && min_depth≤max_depth && max_depth≤dim
-        @assert 1<inc_depth && 0<dec_depth && dec_depth<1
+        @assert 1 ≤ min_depth && min_depth ≤ max_depth && max_depth ≤ dim
+        @assert 1 < inc_depth && 0 < dec_depth && dec_depth < 1
     else
         min_depth, max_depth = depth, depth
     end
@@ -314,7 +314,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
 
     function p!(M::R)
         # Regularization
-        λ = regularizer(M, obj.g_norm)
+        λ = regularizer(opt, M, obj.g_norm)
 
         # Update search direction
         s = pinv(sqrt(λ))
@@ -337,7 +337,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     end
 
     # Linesearch
-    status = opt.linesearch!(opt, x, p!, obj, stats)
+    status, η, M = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Compute residual
     @views z = dot(E.vectors[solver.depth,:], cache1)
@@ -367,12 +367,12 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     end
 
     # Stats
-    update_M!(stats, opt.M)
+    update_M!(stats, M)
     update_r!(stats, r_norm)
 
     # Update
     if status
-        @. x += solver.p
+        @. x += η*solver.p
     else
         stats.status = "Linesearch failure"
     end
@@ -457,7 +457,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     end
 
     # Regularization
-    λ = regularizer(opt, obj.g_norm)
+    λ = regularizer(opt, opt.M, obj.g_norm)
 
     # Temporary memory
     cache1 = similar(obj.g, block_depth)
@@ -478,9 +478,6 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     # Linesearch
     η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
-    # Stats
-    update_M!(stats, opt.M)
-
     # Update
     if status
         @. x += η*solver.p
@@ -495,22 +492,50 @@ end
 
 
 function fixed_step!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
-    p, _ = p!(opt.M)
-    p .*= opt.η
-    return true
+    M = opt.M
+    p, _ = p!(M)
+    
+    return true, opt.η, M
 end
 
+"""
+Perform an in-place regularization line search.
+
+# Arguments
+- `opt::RSFNOptimizer`: Optimizer instance.
+- `x::S`: Current iterate.
+- `p::S`: Search direction.
+- `obj:Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+
+# Updates
+- `opt.solver.p` with scaled search direction.
+- `opt.M` with updated regularization.
+
+# Returns
+- `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
+"""
 function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
     status = false
     f0 = obj.fval
+    M = opt.M
 
     s = similar(x)
 
-    # 
-    for M in R(10) .^ (-12:12)
+    M *= opt.M₋ # decrease regularization
+
+    # Forwardtrack
+    while !status
+        # Compute new search direction
         p, dec = p!(M)
+
+        # Check search direction
+        if dot(p,p) ≤ sqrt(eps(R))
+            stats.status = "Search direction too small"
+            break
+        end
 
         # Check descent
         stats.f_evals += 1
@@ -521,20 +546,27 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
             opt.M = M
             status = true
             break
+        else
+            M *= opt.M₊ # increase regularization
+        end
+
+        # Check regularization
+        if M ≥ 1e12
+            # println(obj.f(s) - f0, "≤", dec)
+            stats.status = "Local Hessian Lipschitz constant too large"
+            break
         end
     end
 
     if status
-        return status
+        return status, one(R), opt.M
     else
         stats.status = "Falling back to Armijo"
 
-        p, _ = p!(one(R))
+        opt.M = one(R) # NOTE: Should we do this?
+        p, _ = p!(opt.M)
 
-        η, status = armijo!(opt, x, p, obj, stats)
-        p .*= η
-
-        return status
+        return armijo!(opt, x, p, obj, stats)
     end
 end
 
@@ -561,15 +593,15 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     status = false
     f0 = obj.fval
     η = one(R)
+    M = opt.M
 
-    p, dec = p!(opt.M)
+    p, dec = p!(M)
     p_norm = twonorm(p)
 
     s = similar(x)
 
     # Backtrack
     while !status
-
         # Check search direction
         if η*p_norm ≤ sqrt(eps(R))
             stats.status = "Search direction too small"
@@ -598,9 +630,8 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
             opt.M = clamp(M_est, 1e-12, 1e12)
 
-            # println("M Estimate: ", opt.M)
-
             status = true
+            break
         else
             η *= opt.η₋ # decrease step-size
         end
@@ -613,13 +644,14 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
     # Fallback to basic backtracking if linesearch failed
     if status
-        p .*= η
-        return status
+        return status, η, M
     else
+        # println(any(isnan.(s)))
+        # println(η)
+        # println(obj.f(s) - f0, "≤", dec*η^2)
+        # println(M)
         stats.status = "Falling back to Armijo"
-        η, status = armijo!(opt, x, p, obj, stats)
-        p .*= η
-        return status
+        return armijo!(opt, x, p, obj, stats)
     end
 end
 
@@ -627,8 +659,9 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
 
     # Setup
     status = true
-
     f0 = obj.fval
+    η0 = one(R)
+    M = opt.M
 
     s = similar(x)
 
@@ -659,27 +692,7 @@ function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNew
         return (phi, dphi)
     end  
 
-    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, one(R), f0, dot(p, obj.g))
+    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, η0, f0, dot(p, obj.g))
 
-    # Update regularization
-    if !iszero(opt.M)
-        M_est =
-            if isone(η)
-                opt.M*opt.M₋ # decrease regularization
-            elseif η ≥ 0.1
-                # opt.M*opt.M₊ # increase regularization
-                opt.M/η^2
-            else
-                s .= p
-                normalize!(s)
-                η*opt.M + (1-η)*estimate_M(x, obj, s, stats) # re-estimate regularization
-                # estimate_M(x, obj, stats; samples=5)
-            end
-
-        opt.M = clamp(M_est, 1e-12, 1e12)
-
-        # println("M Estimate: ", opt.M)
-    end
-
-    return η, status
+    return status, η, M
 end
