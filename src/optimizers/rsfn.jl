@@ -541,6 +541,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         # Check search direction
         if twonorm(p) ≤ eps(R)
             stats.status = "Search direction too small"
+            status = false
             break
         end
 
@@ -560,6 +561,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         # Check regularization
         if M ≥ 1e18
             stats.status = "Local Hessian Lipschitz constant too large"
+            status = false
             break
         end
     end
@@ -613,6 +615,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         # Check search direction
         if η*p_norm ≤ eps(R)
             stats.status = "Search direction too small"
+            status = false
             break
         end
         
@@ -634,6 +637,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
         if η ≤ eps(R)
             stats.status = "Step-size too small"
+            status = false
             break
         end
     end
