@@ -386,7 +386,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     if status
         @. x += η*solver.p
     else
-        stats.status = "Linesearch failure"
+        # stats.status = "Linesearch failure"
     end
 
     return status
@@ -539,11 +539,11 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         p, dec = p!(M)
 
         # Check search direction
-        if twonorm(p) ≤ eps(R)
-            stats.status = "Search direction too small"
-            status = false
-            break
-        end
+        # if twonorm(p) ≤ eps(R)
+        #     stats.status = "Search direction too small"
+        #     status = false
+        #     break
+        # end
 
         # Check descent
         stats.f_evals += 1
@@ -559,9 +559,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         end
 
         # Check regularization
-        if M ≥ 1e18
-            stats.status = "Local Hessian Lipschitz constant too large"
-            status = false
+        if M ≥ 1e32
             break
         end
     end
@@ -613,11 +611,9 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     # Backtrack
     while !status
         # Check search direction
-        if η*p_norm ≤ eps(R)
-            stats.status = "Search direction too small"
-            status = false
-            break
-        end
+        # if η*p_norm ≤ eps(R)
+        #     break
+        # end
         
         # Check descent
         stats.f_evals += 1
@@ -635,10 +631,14 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
             η *= opt.η₋ # decrease step-size
         end
 
-        if η ≤ eps(R)
-            stats.status = "Step-size too small"
-            status = false
-            break
+        if η ≤ sqrt(eps(R))
+            if M ≥ 1e32
+                break
+            end
+            M *= opt.M₊
+            p, dec = p!(M)
+            p_norm = twonorm(p)
+            η = one(R)
         end
     end
 
