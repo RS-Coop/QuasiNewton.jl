@@ -133,7 +133,7 @@ end
             # estimate_M(x, obj, stats; samples=5)
         end
 
-    opt.M = clamp(M_est, 1e-12, 1e12)
+    opt.M = clamp(M_est, 1e-12, 1e18)
 
     return nothing
 end
@@ -558,22 +558,24 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         end
 
         # Check regularization
-        if M ≥ 1e16
+        if M ≥ 1e18
             stats.status = "Local Hessian Lipschitz constant too large"
             break
         end
     end
 
-    if status
-        return status, one(R), opt.M
-    else
-        # stats.status = "Falling back to Armijo"
+    return status, one(R), opt.M
 
-        opt.M = one(R) # NOTE: Should we do this?
-        p, _ = p!(opt.M)
+    # if status
+    #     return status, one(R), opt.M
+    # else
+    #     stats.status = "Falling back to Armijo"
 
-        return armijo!(opt, x, p, obj, stats)
-    end
+    #     opt.M = one(R) # NOTE: Should we do this?
+    #     p, _ = p!(opt.M)
+
+    #     return armijo!(opt, x, p, obj, stats)
+    # end
 end
 
 """
@@ -636,13 +638,16 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         end
     end
 
-    # Fallback to basic backtracking if linesearch failed
-    if status
-        return status, η, M
-    else
-        stats.status = "Falling back to Armijo"
-        return armijo!(opt, x, p, obj, stats)
-    end
+    return status, η, M
+
+    # # Fallback to basic backtracking if linesearch failed
+    # if status
+    #     return status, η, M
+    # else
+    #     stats.status = "Falling back to Armijo"
+        
+    #     return armijo!(opt, x, p, obj, stats)
+    # end
 end
 
 function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
