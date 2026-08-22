@@ -133,7 +133,7 @@ end
             # estimate_M(x, obj, stats; samples=5)
         end
 
-    opt.M = clamp(M_est, 1e-12, 1e16) #1e32
+    opt.M = clamp(M_est, 1e-12, 1e12) #1e32
 
     return nothing
 end
@@ -229,8 +229,6 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
     # Update
     if status
         @. x += η*solver.p
-    else
-        stats.status = "Linesearch failure"
     end
 
     return status
@@ -385,8 +383,6 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Update
     if status
         @. x += η*solver.p
-    else
-        stats.status = "Linesearch failure"
     end
 
     return status
@@ -611,9 +607,9 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
     # Backtrack
     while !status
         # Check search direction
-        # if η*p_norm ≤ eps(R)
-        #     break
-        # end
+        if η*p_norm ≤ eps(R)
+            break
+        end
         
         # Check descent
         stats.f_evals += 1
@@ -631,7 +627,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
             η *= opt.η₋ # decrease step-size
         end
 
-        if η ≤ sqrt(eps(R))
+        if η ≤ eps(R)
             M *= opt.M₊
 
             if M ≥ 1e16 #1e32

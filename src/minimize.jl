@@ -99,7 +99,10 @@ function minimize!(opt::Opt, x::S, obj::Objective; max_iter::Int, max_time::T, h
         end
 
         # Optimizer step
-        step!(opt, opt.solver, x, obj, stats; max_time=max_time-time) ? nothing : break
+        if !step!(opt, opt.solver, x, obj, stats; max_time=max_time-time)
+            stats.status = "Linesearch failure"
+            break
+        end
 
         # Update objective function
         update!(obj, x)
