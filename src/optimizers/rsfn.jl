@@ -133,7 +133,7 @@ end
             # estimate_M(x, obj, stats; samples=5)
         end
 
-    opt.M = clamp(M_est, 1e-12, 1e12) #1e32
+    opt.M = clamp(M_est, 1e-12, 1e32) #1e32
 
     return nothing
 end
@@ -535,11 +535,9 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         p, dec = p!(M)
 
         # Check search direction
-        # if twonorm(p) ≤ eps(R)
-        #     stats.status = "Search direction too small"
-        #     status = false
-        #     break
-        # end
+        if twonorm(p) ≤ eps(R)
+            break
+        end
 
         # Check descent
         stats.f_evals += 1
@@ -555,7 +553,7 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         end
 
         # Check regularization
-        if M ≥ 1e16 #1e32?
+        if M ≥ 1e32 #1e32?
             break
         end
     end
@@ -630,7 +628,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         if η ≤ eps(R)
             M *= opt.M₊
 
-            if M ≥ 1e16 #1e32
+            if M ≥ 1e32 #1e32
                 break
             end
 
