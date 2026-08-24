@@ -126,12 +126,13 @@ end
         if isone(η)
             opt.M*opt.M₋ # decrease regularization
         elseif η ≥ 0.1
-            # opt.M*opt.M₊ # increase regularization
-            opt.M/η^2
-        else
-            estimate_M(x, obj, s, stats) # re-estimate regularization
-            # estimate_M(x, obj, stats; samples=5)
+            opt.M*opt.M₊ # increase regularization
+            # opt.M/η^2
         end
+        # else
+        #     estimate_M(x, obj, s, stats) # re-estimate regularization
+        #     # estimate_M(x, obj, stats; samples=5)
+        # end
 
     opt.M = clamp(M_est, 1e-12, 1e32) #1e32
 
