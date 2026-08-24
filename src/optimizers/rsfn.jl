@@ -125,7 +125,7 @@ end
     M_est =
         if isone(η)
             opt.M*opt.M₋ # decrease regularization
-        elseif η ≥ 0.1
+        else
             opt.M*opt.M₊ # increase regularization
             # opt.M/η^2
         end
