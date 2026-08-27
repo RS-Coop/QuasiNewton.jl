@@ -205,7 +205,7 @@ function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, st
 
         α = solver.cache[i] # save this inner product for later
 
-        @. solver.cache *= pinv(sqrt(E.values^2 + λ))
+        @. solver.cache /= sqrt(E.values^2 + λ)
         mul!(solver.p, E.vectors, solver.cache)
 
         # 
@@ -333,7 +333,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
         λ = regularizer(opt, M, obj.g_norm)
 
         # Update search direction
-        @. cache1 = pinv(sqrt(E.values^2 + λ))*v1
+        @. cache1 = v1 / sqrt(E.values^2 + λ)
         mul!(cache2, E.vectors, cache1)
         mul!(solver.p, Q, cache2, -obj.g_norm, zero(R))
 
@@ -474,7 +474,7 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
     solver.p .= zero(R)
 
     # Update search direction
-    @. cache1 = pinv(sqrt(E.values^2 + λ))*v1
+    @. cache1 = v1 / sqrt(E.values^2 + λ)
     mul!(cache2, E.vectors, cache1)
     @views mul!(solver.p, Q, cache2, -B1[1,1], zero(R))
     
@@ -625,7 +625,7 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
             η *= opt.η₋ # decrease step-size
         end
 
-        if η ≤ eps(R)
+        if η ≤ 1e-1 #eps(R)
             M *= opt.M₊
 
             if M ≥ 1e32 #1e32
