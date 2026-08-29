@@ -268,3 +268,51 @@ function backtrack!(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::Qua
 
     return p, status
 end
+
+# function armijo!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+
+#     # Setup
+#     status = true
+#     f0 = obj.fval
+#     η0 = one(R)
+#     M = opt.M
+
+#     p, _ = p!(M)
+
+#     s = similar(x)
+
+#     function ϕ(t)
+#         stats.f_evals += 1
+#         s .= x + t*p
+#         return obj.f(s)
+#     end
+
+#     function dϕ(t)
+#         stats.f_evals += 1
+#         s .= x + t*p
+#         obj.fg!(obj.g, s)
+        
+#         stats.g_evals += 1
+
+#         return dot(p, obj.g)
+#     end
+
+#     function ϕdϕ(t)
+#         stats.f_evals += 1
+#         s .= x + t*p
+#         phi = obj.fg!(obj.g, s)
+
+#         stats.g_evals += 1
+
+#         dphi = dot(p, obj.g)
+#         return (phi, dphi)
+#     end  
+
+#     η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, η0, f0, dot(p, obj.g))
+
+#     # Update regularization
+#     s .= p
+#     update_M!(opt, η, x, s, obj, stats)
+
+#     return status, η, M
+# end

@@ -120,24 +120,6 @@ Compute regularization parameter for R-SFN.
     return iszero(M) ? zero(R) : clamp(M*g_norm, eps(R), R(1e32))
 end
 
-@inline function update_M!(opt::RSFNOptimizer, η::R, x::S, s::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    # M_est = estimate_M(x, obj, s, stats)
-    M_est =
-        if isone(η)
-            opt.M*opt.M₋ # decrease regularization
-        elseif η ≥ 0.1
-            # opt.M*opt.M₊ # increase regularization
-            opt.M/η^2
-        else
-            estimate_M(x, obj, s, stats) # re-estimate regularization
-            # estimate_M(x, obj, stats; samples=5)
-        end
-
-    opt.M = clamp(M_est, 1e-12, 1e32) #1e32
-
-    return nothing
-end
-
 #########################################################
 # EigenSolver: Full eigendecomposition solver
 #########################################################
@@ -353,8 +335,9 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     status, η, M = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Compute residual
+    @. cache1 = v1 / E.values
     @views z = dot(E.vectors[solver.depth,:], cache1)
-    r_norm = abs(obj.g_norm*βₖ₊₁*z) # NOTE: In this line, we are implicitly multiplying by the sign(a1), the second term in the power series for our function
+    r_norm = abs(obj.g_norm*βₖ₊₁*z)
     
     # Tolerance
     if isnan(tol)
@@ -545,7 +528,9 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         @. s = x + p
 
         if obj.f(s) - f0 ≤ dec
+            # Update regularization
             opt.M = M
+
             status = true
             break
         else
@@ -553,23 +538,12 @@ function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quasi
         end
 
         # Check regularization
-        if M ≥ 1e32 #1e32?
+        if M ≥ 1e16 #1e32?
             break
         end
     end
 
-    return status, one(R), opt.M
-
-    # if status
-    #     return status, one(R), opt.M
-    # else
-    #     stats.status = "Falling back to Armijo"
-
-    #     opt.M = one(R) # NOTE: Should we do this?
-    #     p, _ = p!(opt.M)
-
-    #     return armijo!(opt, x, p, obj, stats)
-    # end
+    return status, one(R), M
 end
 
 """
@@ -617,7 +591,20 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
         if obj.f(s) - f0 ≤ dec*η^2
             # Update regularization
             s .= p
-            update_M!(opt, η, x, s, obj, stats)
+            
+            # M_est = estimate_M(x, obj, s, stats)
+            M_est =
+                if isone(η)
+                    opt.M*opt.M₋ # decrease regularization
+                elseif η ≥ 0.1
+                    # opt.M*opt.M₊ # increase regularization
+                    opt.M/η^2
+                else
+                    estimate_M(x, obj, s, stats) # re-estimate regularization
+                    # estimate_M(x, obj, stats; samples=5)
+                end
+
+            opt.M = clamp(M_est, 1e-12, 1e32) #1e32
 
             status = true
             break
@@ -625,10 +612,10 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
             η *= opt.η₋ # decrease step-size
         end
 
-        if η ≤ 1e-1 #eps(R)
+        if η < 1e-1 #eps(R)
             M *= opt.M₊
 
-            if M ≥ 1e32 #1e32
+            if M ≥ 1e16 #1e32
                 break
             end
 
@@ -637,109 +624,6 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
             η = one(R)
         end
     end
-
-    return status, η, M
-
-    # # Fallback to basic backtracking if linesearch failed
-    # if status
-    #     return status, η, M
-    # else
-    #     stats.status = "Falling back to Armijo"
-        
-    #     return armijo!(opt, x, p, obj, stats)
-    # end
-end
-
-function armijo!(opt::RSFNOptimizer, x::S, p::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
-
-    # Setup
-    status = true
-    f0 = obj.fval
-    η0 = one(R)
-    M = opt.M
-
-    s = similar(x)
-
-    function ϕ(t)
-        stats.f_evals += 1
-        s .= x + t*p
-        return obj.f(s)
-    end
-
-    function dϕ(t)
-        stats.f_evals += 1
-        s .= x + t*p
-        obj.fg!(obj.g, s)
-        
-        stats.g_evals += 1
-
-        return dot(p, obj.g)
-    end
-
-    function ϕdϕ(t)
-        stats.f_evals += 1
-        s .= x + t*p
-        phi = obj.fg!(obj.g, s)
-
-        stats.g_evals += 1
-
-        dphi = dot(p, obj.g)
-        return (phi, dphi)
-    end  
-
-    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, η0, f0, dot(p, obj.g))
-
-    # Update regularization
-    s .= p
-    update_M!(opt, η, x, s, obj, stats)
-
-    return status, η, M
-end
-
-function armijo!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
-
-    # Setup
-    status = true
-    f0 = obj.fval
-    η0 = one(R)
-    M = opt.M
-
-    p, _ = p!(M)
-
-    s = similar(x)
-
-    function ϕ(t)
-        stats.f_evals += 1
-        s .= x + t*p
-        return obj.f(s)
-    end
-
-    function dϕ(t)
-        stats.f_evals += 1
-        s .= x + t*p
-        obj.fg!(obj.g, s)
-        
-        stats.g_evals += 1
-
-        return dot(p, obj.g)
-    end
-
-    function ϕdϕ(t)
-        stats.f_evals += 1
-        s .= x + t*p
-        phi = obj.fg!(obj.g, s)
-
-        stats.g_evals += 1
-
-        dphi = dot(p, obj.g)
-        return (phi, dphi)
-    end  
-
-    η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, η0, f0, dot(p, obj.g))
-
-    # Update regularization
-    s .= p
-    update_M!(opt, η, x, s, obj, stats)
 
     return status, η, M
 end
