@@ -347,7 +347,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     status, η, M = opt.linesearch!(opt, x, p!, obj, stats)
 
     # Compute residual
-    @. cache1 = v1 / E.values
+    # @. cache1 = v1 / E.values
     @views z = dot(E.vectors[solver.depth,:], cache1)
     r_norm = abs(obj.g_norm*βₖ₊₁*z)
     
