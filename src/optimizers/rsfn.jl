@@ -4,8 +4,6 @@ Author: Cooper Simpson
 Regularized Saddle-Free Newton (R-SFN).
 =#
 
-using LineSearches: BackTracking
-
 include("lanczos.jl")
 
 #########################################################
@@ -33,11 +31,12 @@ Regularized Saddle-Free Newton (R-SFN) optimizer.
 mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: QuasiNewtonOptimizer
     const solver::Q # search direction solver
     M::R # local Hessian Lipschitz constant
-    const linesearch!::F # linesearch function
-    const η::R # step-size
     const M₊::R # M increase factor
     const M₋::R # M decrease factor
+    const η::R # step-size
     const η₋::R # η decrease factor
+    const η_min::R # minimum η
+    const linesearch!::F # linesearch function
     const atol::R # absolute gradient norm tolerance
     const rtol::R # relative gradient norm tolerance
 end
@@ -49,11 +48,12 @@ Constructor for `RSFNOptimizer`.
 - `dim::Int`: Problem dimension.
 - `solver`: Search direction solver type (default: `LFASolver`).
 - `M::Float`: Hessian Lipschitz constant (default: `NaN` for auto-estimation).
-- `linesearch::Function`: Optional linesearch function (default: `search_η!`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
-- `M₊::Float`: M increase factor in (1,∞) (default: `2.0`).
-- `M₋::Float`: M decrease factor in (0,1) (default: `0.25`).
-- `η₋::Float`: η decrease factor in (0,1) (default: `0.5`).
+- `M₊::Float`: M increase factor in [1,∞) (default: `2.0`).
+- `M₋::Float`: M decrease factor in (0,1] (default: `0.25`).
+- `η₋::Float`: η decrease factor in (0,1) (default: `√2`).
+- `η_min::Float`: Minimum η in (0,1] (default: `1e-2`).
+- `linesearch::Function`: Optional linesearch function (default: `search_η!`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
 - `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
 - `kwargs`: Keyword arguments passed to solver constructor.
@@ -61,7 +61,14 @@ Constructor for `RSFNOptimizer`.
 # Returns
 - `RSFNOptimizer` instance.
 """
-function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch::F=search_η!, η::R2=1.0, M₊::R2=2.0, M₋::R2=0.25, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+function RSFNOptimizer(dim::Int;
+    solver::Solver=LFASolver,
+    M::R1=NaN, M₊::R2=2.0, M₋::R2=0.25,
+    η::R2=1.0, η₋::R2=1/sqrt(2), η_min::R2=1e-2,
+    linesearch::F=linesearch!,
+    atol::R2=1e-5, rtol::R2=1e-6,
+    kwargs...
+    ) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0 ≤ M
@@ -72,13 +79,13 @@ function RSFNOptimizer(dim::Int; solver::Solver=LFASolver, M::R1=NaN, linesearch
         @assert 0 < η && η ≤ 1
         linesearch = fixed_step!
     else
-        @assert 0 < η₋ && η₋ < 1
+        @assert 0 < η₋ && η₋ < 1 && 0 < η_min && η_min ≤ 1
     end
 
     # Solver
     solver_ = solver(dim; kwargs...)
 
-    return RSFNOptimizer(solver_, R2(M), linesearch, η, M₊, M₋, η₋, atol, rtol)
+    return RSFNOptimizer(solver_, R2(M), M₊, M₋, η, η₋, η_min, linesearch, atol, rtol)
 end
 
 """
@@ -261,7 +268,12 @@ Constructor for `LFASolver`.
 # Returns
 - `LFASolver` instance.
 """
-function LFASolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)), adapt::Bool=true, max_depth::Int=dim, min_depth::Int=1, inc_depth::R=1.5, dec_depth::R=0.5, eigenstep::Bool=true) where {R<:AbstractFloat}
+function LFASolver(dim::Int;
+    type::Type{<:AbstractVector{R}}=Vector{Float64},
+    depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)),
+    adapt::Bool=true, max_depth::Int=dim, min_depth::Int=1, inc_depth::R=1.5, dec_depth::R=0.5,
+    eigenstep::Bool=true
+    ) where {R<:AbstractFloat}
 
     @assert 1≤depth && depth≤dim
 
@@ -485,7 +497,7 @@ function fixed_step!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
 end
 
 """
-Perform an in-place regularization line search.
+Perform in-place linesearch on step-size and/or regularization.
 
 # Arguments
 - `opt::RSFNOptimizer`: Optimizer instance.
@@ -499,71 +511,11 @@ Perform an in-place regularization line search.
 - `opt.M` with updated regularization.
 
 # Returns
-- `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
+- `status::Bool`: `true` if a satisfactory step was found.
+- `η::Float`: Accepted step-size.
+- `M::Float`: Accepted regularization.
 """
-function search_M!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
-
-    # Setup
-    status = false
-    f0 = obj.fval
-    M = opt.M
-
-    s = similar(x)
-
-    M *= opt.M₋ # decrease regularization
-
-    # Forwardtrack
-    while !status
-        # Compute new search direction
-        p, dec = p!(M)
-
-        # Check search direction
-        if twonorm(p) ≤ eps(R)
-            break
-        end
-
-        # Check descent
-        stats.f_evals += 1
-
-        @. s = x + p
-
-        if obj.f(s) - f0 ≤ dec
-            # Update regularization
-            opt.M = M
-
-            status = true
-            break
-        else
-            M *= opt.M₊ # increase regularization
-        end
-
-        # Check regularization
-        if M ≥ 1e16 #1e32?
-            break
-        end
-    end
-
-    return status, one(R), M
-end
-
-"""
-Perform an in-place step-size line search.
-
-# Arguments
-- `opt::RSFNOptimizer`: Optimizer instance.
-- `x::S`: Current iterate.
-- `p::S`: Search direction.
-- `obj:Objective`: Objective function instance.
-- `stats::QuasiNewtonStats`: Optimization Statistics
-
-# Updates
-- `opt.solver.p` with scaled search direction.
-- `opt.M` with updated regularization.
-
-# Returns
-- `status::Bool`: `true` if a satisfactory step-size was found; otherwise falls back to `backtrack!`.
-"""
-function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
     status = false
@@ -590,21 +542,19 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
 
         if obj.f(s) - f0 ≤ dec*η^2
             # Update regularization
-            s .= p
-            
-            # M_est = estimate_M(x, obj, s, stats)
             M_est =
                 if isone(η)
-                    opt.M*opt.M₋ # decrease regularization
+                    M*opt.M₋ # decrease regularization
                 elseif η ≥ 0.1
                     # opt.M*opt.M₊ # increase regularization
-                    opt.M/η^2
+                    M/η^2
                 else
+                    s .= p
                     estimate_M(x, obj, s, stats) # re-estimate regularization
                     # estimate_M(x, obj, stats; samples=5)
                 end
 
-            opt.M = clamp(M_est, 1e-12, 1e32) #1e32
+            opt.M = clamp(M_est, 1e-12, 1e16) #1e32
 
             status = true
             break
@@ -612,13 +562,9 @@ function search_η!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Quas
             η *= opt.η₋ # decrease step-size
         end
 
-        if η < 1e-1 #eps(R)
+        # Increase regularization
+        if η < opt.η_min && M < 1e16
             M *= opt.M₊
-
-            if M ≥ 1e16 #1e32
-                break
-            end
-
             p, dec = p!(M)
             p_norm = twonorm(p)
             η = one(R)

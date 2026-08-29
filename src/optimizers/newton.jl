@@ -37,7 +37,7 @@ Constructor for `NewtonOptimizer`.
 - `dim::Int`: Problem dimension.
 - `posdef::Bool`: Whether Hessian is positive definite (default: `false`).
 - `M::Float`: Hessian regularization scaling (default: `0.0`).
-- `linesearch::Function`: Linesearch function (default: `backtrack!`).
+- `linesearch::Function`: Linesearch function (default: `linesearch!`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
 - `η₋::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
@@ -47,7 +47,7 @@ Constructor for `NewtonOptimizer`.
 # Returns
 - `NewtonOptimizer` instance.
 """
-function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack!, η::R2=1.0, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
+function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=linesearch!, η::R2=1.0, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
 
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -227,7 +227,7 @@ Perform a cubic-order backtracking line search.
 # Returns
 - `status::Bool`: Always returns `true`.
 """
-function backtrack!(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function linesearch!(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Setup
     status = false
@@ -268,51 +268,3 @@ function backtrack!(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::Qua
 
     return p, status
 end
-
-# function armijo!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
-
-#     # Setup
-#     status = true
-#     f0 = obj.fval
-#     η0 = one(R)
-#     M = opt.M
-
-#     p, _ = p!(M)
-
-#     s = similar(x)
-
-#     function ϕ(t)
-#         stats.f_evals += 1
-#         s .= x + t*p
-#         return obj.f(s)
-#     end
-
-#     function dϕ(t)
-#         stats.f_evals += 1
-#         s .= x + t*p
-#         obj.fg!(obj.g, s)
-        
-#         stats.g_evals += 1
-
-#         return dot(p, obj.g)
-#     end
-
-#     function ϕdϕ(t)
-#         stats.f_evals += 1
-#         s .= x + t*p
-#         phi = obj.fg!(obj.g, s)
-
-#         stats.g_evals += 1
-
-#         dphi = dot(p, obj.g)
-#         return (phi, dphi)
-#     end  
-
-#     η, _ = BackTracking(order=3)(ϕ, dϕ, ϕdϕ, η0, f0, dot(p, obj.g))
-
-#     # Update regularization
-#     s .= p
-#     update_M!(opt, η, x, s, obj, stats)
-
-#     return status, η, M
-# end
