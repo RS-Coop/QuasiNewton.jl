@@ -64,7 +64,7 @@ Constructor for `RSFNOptimizer`.
 function RSFNOptimizer(dim::Int;
     solver::Solver=LFASolver,
     M::R1=NaN, M₊::R2=2.0, M₋::R2=0.25,
-    η::R2=1.0, η₋::R2=1/sqrt(2), η_min::R2=1e-2,
+    η::R2=1.0, η₋::R2=1/sqrt(2), η_min::R2=1e-1,
     linesearch::F=linesearch!,
     atol::R2=1e-5, rtol::R2=1e-6,
     kwargs...
