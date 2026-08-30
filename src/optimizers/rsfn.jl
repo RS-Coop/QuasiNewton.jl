@@ -545,13 +545,9 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
             M_est =
                 if isone(η)
                     M*opt.M₋ # decrease regularization
-                elseif η ≥ 0.1
+                else
                     # opt.M*opt.M₊ # increase regularization
                     M/η^2
-                else
-                    s .= p
-                    estimate_M(x, obj, s, stats) # re-estimate regularization
-                    # estimate_M(x, obj, stats; samples=5)
                 end
 
             opt.M = clamp(M_est, 1e-12, 1e16) #1e32
