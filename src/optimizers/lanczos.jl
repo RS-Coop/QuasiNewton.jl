@@ -6,80 +6,105 @@ Author: Cooper Simpson
 # Scalar Lanczos
 #########################################################
 
+struct LanczosWorkspace{R<:AbstractFloat}
+    Q::Matrix{R} # orthogonal basis
+    d::Vector{R} # diagonal elements
+    dl::Vector{R} # lower (and upper) diagonal elements
+end
+
+function LanczosWorkspace{R}(n::Int, max_depth::Int) where {R<:AbstractFloat}
+    Q = Matrix{R}(undef, n, max_depth+1)
+    d = Vector{R}(undef, max_depth)
+    dl = Vector{R}(undef, max_depth)
+
+    return LanczosWorkspace(Q, d, dl)
+end
+
+"""
+"""
+function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+    m, n = size(Z)
+	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
+
+    Q = Matrix{R}(undef, n, k+1)
+	d = Vector{R}(undef, k) # diagonal elements
+	dl = Vector{R}(undef, k) # lower (and upper) diagonal elements
+
+    workspace = LanczosWorkspace(Q, d, dl)
+
+    return lanczos(workspace, Z, ω, k; reorthogonalize=reorthogonalize)
+end
+
 """
 Scalar Lanczos process.
 
 # Arguments
+- `workspace::LanczosWorkspace`: Preallocated workspace
 - `Z::Matrix`: Symmetric matrix
 - `ω::Vector`: Vector
 - `k::Int`: Krylov subspace depth
 - `reorthogonalize::Bool`: Whether to perform partial reorthogonalization.
 """
-function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+function lanczos(workspace::LanczosWorkspace{R}, Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
 	m, n = size(Z)
 	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
 
-    # Preallocate
+    # Setup
 	β₁ = zero(R)
-	Q = Matrix{R}(undef, n, k+1)
 
-	d = zeros(R, k) # diagonal elements
-	dl = zeros(R, k) # lower (and upper) diagonal elements
+	Q = @view workspace.Q[:,1:k+1]
 
-	for i = 1:k
-		qᵢ = view(Q,:,i)
-		qᵢ₊₁ = q = view(Q,:,i+1)
+	d = @view workspace.d[1:k]
+	dl = @view workspace.dl[1:k]
 
-		if i == 1
-            β₁ = twonorm(ω)
-			if β₁ == 0
-				error("Exact breakdown β₁ == 0.")
-			else
-                copyto!(qᵢ, ω)
-                rmul!(qᵢ, inv(β₁))
-			end
-		end
+    # Initialize
+    β₁ = twonorm(ω)
+    β₁ == 0 && error("Exact breakdown β₁ == 0.")
+    @views q₁ = Q[:,1]
+    copyto!(q₁, ω)
+    rmul!(q₁, inv(β₁))
 
-		mul!(q, Z, qᵢ)
+	@views for i = 1:k
+		qᵢ = Q[:,i]
+		qᵢ₊₁ = Q[:,i+1]
+
+		mul!(qᵢ₊₁, Z, qᵢ)
 
 		if i ≥ 2
-			qᵢ₋₁ = view(Q,:,i-1)
+			qᵢ₋₁ = Q[:,i-1]
 			βᵢ = dl[i-1]
-			axpy!(-βᵢ, qᵢ₋₁, q)
+			axpy!(-βᵢ, qᵢ₋₁, qᵢ₊₁)
 		end
 
-		αᵢ = dot(qᵢ, q)
-		axpy!(-αᵢ, qᵢ, q)
+		αᵢ = dot(qᵢ, qᵢ₊₁)
+		axpy!(-αᵢ, qᵢ, qᵢ₊₁)
 
 		# Selective reorthogonalization against last two vectors.
 		if reorthogonalize
 			if i ≥ 2
-				qᵢ₋₁ = view(Q,:,i-1)
-				βtmp = dot(qᵢ₋₁, q)
+				βtmp = dot(qᵢ₋₁, qᵢ₊₁)
 				dl[i-1] += βtmp
-				axpy!(-βtmp, qᵢ₋₁, q)
+				axpy!(-βtmp, qᵢ₋₁, qᵢ₊₁)
 			end
 
-			αtmp = dot(qᵢ, q)
+			αtmp = dot(qᵢ, qᵢ₊₁)
 			αᵢ += αtmp
-			axpy!(-αtmp, qᵢ, q)
+			axpy!(-αtmp, qᵢ, qᵢ₊₁)
 		end
 
 		d[i] = αᵢ
-		βᵢ₊₁ = twonorm(q)
+		βᵢ₊₁ = twonorm(qᵢ₊₁)
 
 		if βᵢ₊₁ ≤ eps(R)
-			# error("Breakdown βᵢ₊₁ ≤ eps at iteration i = $i.")
 			fill!(qᵢ₊₁, zero(R))
 		else
-            copyto!(qᵢ₊₁, q)
             rmul!(qᵢ₊₁, inv(βᵢ₊₁))
 		end
 
 		dl[i] = βᵢ₊₁
 	end
 
-	return Q, SymTridiagonal(d, dl[1:k-1]), dl[end]
+	return @views Q[:,1:k], SymTridiagonal(d, dl[1:k-1]), dl[end]
 end
 
 #########################################################

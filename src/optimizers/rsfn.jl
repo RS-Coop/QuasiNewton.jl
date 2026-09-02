@@ -249,6 +249,7 @@ mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewton
     const p::S # search direction
     const cache1::S # temporary memory
     const cache2::S # temporary memory
+    const workspace::LanczosWorkspace{R} # lanczos workspace
 end
 
 """
@@ -284,7 +285,10 @@ function LFASolver(dim::Int;
         min_depth, max_depth = depth, depth
     end
 
-    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, dim), type(undef, max_depth), type(undef, max_depth))
+    workspace = LanczosWorkspace{R}(dim, max_depth)
+
+    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, 
+                        eigenstep, type(undef, dim), type(undef, max_depth), type(undef, max_depth), workspace)
 end
 
 """
@@ -306,7 +310,7 @@ Compute a single R-SFN step using `LFASolver`.
 function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(obj.H, obj.g, solver.depth, reorthogonalize=false)
+    Q, T, βₖ₊₁ = lanczos(solver.workspace, obj.H, obj.g, solver.depth, reorthogonalize=false)
 
     update_k!(stats, solver.depth)
 
@@ -316,7 +320,6 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     μ, i = findmin(E.values)
 
     # views
-    Q = @view Q[:,1:solver.depth] # NOTE: Getting rid of q_{k+1} since we aren't using it in the residual
     v1 = @view E.vectors[1,:] # NOTE: This is the first entry of each eigenvector
     vi = @view E.vectors[:,i]
     cache1 = @view solver.cache1[1:solver.depth]
@@ -547,10 +550,10 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
                     M*opt.M₋ # decrease regularization
                 else
                     # opt.M*opt.M₊ # increase regularization
-                    M/η^2
+                    M/η
                 end
 
-            opt.M = clamp(M_est, 1e-12, 1e16) #1e32
+            opt.M = clamp(M_est, 1e-12, 1e16)
 
             status = true
             break
