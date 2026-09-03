@@ -12,7 +12,7 @@ include("lanczos.jl")
 
 
 const ρ_GLOBAL = (1-3*sqrt(3))/6
-const ρ_LOCAL = -395/1296
+const ρ_LOCAL = -1/4
 
 """
 Regularized Saddle-Free Newton (R-SFN) optimizer.
@@ -261,7 +261,7 @@ Constructor for `LFASolver`.
 - `depth::Int`: Target Krylov subspace depth (default: `ceil(log2(dim))`).
 - `adapt::Bool`: Whether to adapt Krylov depth dynamically (default: `true`).
 - `min_depth::Int`: Minimum Krylov depth if `adapt=true` (default: `2`).
-- `max_depth::Int`: Maximum Krylov depth if `adapt=true` (default: `1000`).
+- `max_depth::Int`: Maximum Krylov depth if `adapt=true` (default: `dim`).
 - `inc_depth::Int`: Krylov depth increase factor (default: `1.5`).
 - `dec_depth::Int`: Krylov depth decrease factor (default: `0.5`).
 - `eigenstep::Bool`: Whether to add eigenstep (default: `true`).
@@ -272,7 +272,7 @@ Constructor for `LFASolver`.
 function LFASolver(dim::Int;
     type::Type{<:AbstractVector{R}}=Vector{Float64},
     depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)),
-    adapt::Bool=true, max_depth::Int=dim, min_depth::Int=1, inc_depth::R=1.5, dec_depth::R=0.5,
+    adapt::Bool=true, max_depth::Int=dim, min_depth::Int=2, inc_depth::R=2, dec_depth::R=0.5,
     eigenstep::Bool=true
     ) where {R<:AbstractFloat}
 
@@ -553,7 +553,7 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
                     M/η
                 end
 
-            opt.M = clamp(M_est, 1e-12, 1e16)
+            opt.M = clamp(M_est, 1e-12, 1e12)
 
             status = true
             break
@@ -562,7 +562,7 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
         end
 
         # Increase regularization
-        if η < opt.η_min && M < 1e16
+        if η < opt.η_min && M < 1e12
             M *= opt.M₊
             p, dec = p!(M)
             p_norm = twonorm(p)
