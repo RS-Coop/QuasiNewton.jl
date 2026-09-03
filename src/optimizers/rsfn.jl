@@ -272,7 +272,7 @@ Constructor for `LFASolver`.
 function LFASolver(dim::Int;
     type::Type{<:AbstractVector{R}}=Vector{Float64},
     depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)),
-    adapt::Bool=true, max_depth::Int=dim, min_depth::Int=2, inc_depth::R=2, dec_depth::R=0.5,
+    adapt::Bool=true, max_depth::Int=dim, min_depth::Int=2, inc_depth::R=2.0, dec_depth::R=0.5,
     eigenstep::Bool=true
     ) where {R<:AbstractFloat}
 
