@@ -51,7 +51,7 @@ Constructor for `RSFNOptimizer`.
 - `η::Float`: Step size in (0,1] (default: `1.0`).
 - `M₊::Float`: M increase factor in [1,∞) (default: `2.0`).
 - `M₋::Float`: M decrease factor in (0,1] (default: `0.25`).
-- `η₋::Float`: η decrease factor in (0,1) (default: `√2`).
+- `η₋::Float`: η decrease factor in (0,1) (default: `0.5`).
 - `η_min::Float`: Minimum η in (0,1] (default: `1e-2`).
 - `linesearch::Function`: Optional linesearch function (default: `search_η!`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
@@ -63,8 +63,8 @@ Constructor for `RSFNOptimizer`.
 """
 function RSFNOptimizer(dim::Int;
     solver::Solver=LFASolver,
-    M::R1=NaN, M₊::R2=2.0, M₋::R2=0.25,
-    η::R2=1.0, η₋::R2=1/sqrt(2), η_min::R2=1e-1,
+    M::R1=NaN, M₊::R2=1e1, M₋::R2=0.25,
+    η::R2=1.0, η₋::R2=0.5, η_min::R2=0.03125,
     linesearch::F=linesearch!,
     atol::R2=1e-5, rtol::R2=1e-6,
     kwargs...
@@ -534,7 +534,7 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
     # Backtrack
     while !status
         # Check search direction
-        if η*p_norm ≤ eps(R)
+        if isnan(p_norm) || p_norm ≤ eps(R)
             break
         end
         
@@ -553,16 +553,17 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
                     M/η
                 end
 
-            opt.M = clamp(M_est, 1e-12, 1e12)
+            opt.M = clamp(M_est, 1e-12, 1e16)
 
             status = true
             break
         else
             η *= opt.η₋ # decrease step-size
+            p_norm *= opt.η₋
         end
 
         # Increase regularization
-        if η < opt.η_min && M < 1e12
+        if η < opt.η_min && M < 1e16
             M *= opt.M₊
             p, dec = p!(M)
             p_norm = twonorm(p)
