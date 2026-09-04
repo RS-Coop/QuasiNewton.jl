@@ -279,7 +279,10 @@ function LFASolver(dim::Int;
     @assert 1≤depth && depth≤dim
 
     if adapt
-        @assert 1 ≤ min_depth && min_depth ≤ max_depth && max_depth ≤ dim
+        min_depth = max(1, min_depth)
+        max_depth = min(dim, max_depth)
+
+        @assert min_depth ≤ max_depth
         @assert 1 < inc_depth && 0 < dec_depth && dec_depth < 1
     else
         min_depth, max_depth = depth, depth
