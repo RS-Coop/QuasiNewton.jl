@@ -106,7 +106,8 @@ Perform setup operations before beginning optimization process.
 @inline function setup!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     # Estimate regularization
     if isnan(opt.M)
-        M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
+        samples = 1 #ceil(Int, log2(length(x)))
+        M_est = estimate_M(x, obj, stats; samples=samples)
         opt.M = clamp(M_est, R(1e-6), R(1e6))
     end
 
