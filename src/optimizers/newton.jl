@@ -54,7 +54,7 @@ function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=l
 
     # Linesearch parameters
     if isnothing(linesearch)
-        @assert 0 < η && η ≤ 1
+        @assert 0 < η ≤ 1
         linesearch = (args...) -> return η
     end
 
