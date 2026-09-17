@@ -53,7 +53,7 @@ module QuasiNewton
 	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor.
 
 	# Updates
-	- `x` with approximate solution.
+	- `x`: Approximate solution.
 
 	# Returns
 	- `stats`: Optimization statistics including final solution, convergence info, and optionally history.
@@ -80,7 +80,7 @@ module QuasiNewton
 	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor.
 
 	# Updates
-	- `x` with approximate solution.
+	- `x`: Approximate solution.
 
 	# Returns
 	- `stats`: Optimization statistics including final solution, convergence info, and optionally history.
