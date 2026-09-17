@@ -53,8 +53,8 @@ function ARCOptimizer(dim::Int; solver::Solver=ARCSolver, M::R1=10.0, η1::R2=0.
 
     #
     @assert 0 < M
-    @assert 0 < η1 && η1 < η2 && η2 < 1
-    @assert 0 < γ1 && γ1 < 1 && 1 < γ2
+    @assert 0 < η1 < η2 < 1
+    @assert 0 < γ1 < 1 < γ2
 
     solver_ = solver(dim; kwargs...)
 
