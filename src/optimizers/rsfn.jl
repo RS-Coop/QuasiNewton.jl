@@ -72,14 +72,14 @@ function RSFNOptimizer(dim::Int;
     
     # Hessian Lipschitz constant
     @assert isnan(M) || 0 ≤ M
-    @assert 1 ≤ M₊ && 0 < M₋ && M₋ ≤ 1
+    @assert 1 ≤ M₊ && 0 < M₋ ≤ 1
 
     # Linesearch parameters
     if isnothing(linesearch) || iszero(M)
-        @assert 0 < η && η ≤ 1
+        @assert 0 < η ≤ 1
         linesearch = fixed_step!
     else
-        @assert 0 < η₋ && η₋ < 1 && 0 < η_min && η_min ≤ 1
+        @assert 0 < η₋ < 1 && 0 < η_min ≤ 1
     end
 
     # Solver
@@ -277,14 +277,14 @@ function LFASolver(dim::Int;
     eigenstep::Bool=true
     ) where {R<:AbstractFloat}
 
-    @assert 1≤depth && depth≤dim
+    @assert 1 ≤ depth ≤ dim
 
     if adapt
         min_depth = max(1, min_depth)
         max_depth = min(dim, max_depth)
 
         @assert min_depth ≤ max_depth
-        @assert 1 < inc_depth && 0 < dec_depth && dec_depth < 1
+        @assert 1 < inc_depth && 0 < dec_depth < 1
     else
         min_depth, max_depth = depth, depth
     end
