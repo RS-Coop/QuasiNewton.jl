@@ -6,6 +6,7 @@
 - Should we be reorthogonalizing in Lanczos?
 - Do we need the tolerance we are asking for in LFA?
 - Probably should be passing `M=missing` when we want autoestimation or something other than `M=NaN`
+- Another linesearch for regularized Newton in the convex case
 
 # Method Additions
 - Randomized coordinate projection (ARC and/or R-SFN)

@@ -24,7 +24,7 @@ mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: Qua
     const solver::Q # search direction solver
     M::R # hessian regularization scaling
     const linesearch!::F # linesearch function
-    const η::R # step-size
+    const η::R # stepsize
     const η₋::R # linesearch reduction factor
     const atol::R # absolute gradient norm tolerance
     const rtol::R # relative gradient norm tolerance
@@ -37,7 +37,7 @@ Constructor for `NewtonOptimizer`.
 - `dim::Int`: Problem dimension.
 - `posdef::Bool`: Whether Hessian is positive definite (default: `false`).
 - `M::Float`: Hessian regularization scaling (default: `0.0`).
-- `linesearch::Function`: Linesearch function (default: `linesearch!`).
+- `linesearch::Function`: Linesearch function (default: `backtrack_armijo`).
 - `η::Float`: Step size in (0,1] (default: `1.0`).
 - `η₋::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
@@ -47,7 +47,7 @@ Constructor for `NewtonOptimizer`.
 # Returns
 - `NewtonOptimizer` instance.
 """
-function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=linesearch!, η::R2=1.0, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
+function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack_armijo, η::R2=1.0, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
 
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -174,8 +174,6 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective,
     # Regularization
     λ = regularizer(opt, opt.M, obj.g_norm)
 
-    update_M!(stats, opt.M)
-
     # Tolerance
     ζ = 0.5
     ξ = R(0.01)
@@ -192,26 +190,28 @@ function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective,
         p = solution(solver.workspace)
     end
 
+    # Linesearch
+    status, η, M = opt.linesearch!(opt, p, x, obj, stats)
+
+    # Stats
+    update_M!(stats, M)
     update_r!(stats, norm(statistics(solver.workspace).residuals))
     update_k!(stats, iteration_count(solver.workspace))
 
-    # Linesearch
-    p, status = opt.linesearch!(opt, p, x, obj, stats)
-
     # Update
     if status
-        x .+= p
+        @. x .+= η*p
     end
 
     return status
 end
 
 #########################################################
-# Backtracking linesearch
+# Linesearch
 #########################################################
 
 """
-Perform a cubic-order backtracking line search.
+Perform a backtracking Armijo line search.
 
 # Arguments
 - `opt::NewtonOptimizer`: Optimizer instance.
@@ -227,44 +227,42 @@ Perform a cubic-order backtracking line search.
 # Returns
 - `status::Bool`: Always returns `true`.
 """
-function linesearch!(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function backtrack_armijo(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Setup
     status = false
+    f0  = obj.fval
+    η = one(R)
+    M = opt.M
     c = R(1e-4)
 
-    f0  = obj.fval
+    p_norm = twonorm(p)
+
     gTp = dot(obj.g, p)
 
-    η = one(R)
-
-    # Check search direction
-    if twonorm(p) < sqrt(eps(R))
-        stats.status = "Search direction too small"
-        status = false
-    end
+    s = similar(x)
 
     # Backtrack
     while !status
-        stats.f_evals += 1
-
-        f = obj.f(x + η*p)
-
-        # Armijo condition
-        if f ≤ f0 + η*c*gTp
-            p .*= η
-            status = true
+        # Check search direction
+        if isnan(p_norm) || p_norm ≤ eps(R)
             break
         end
 
-        # Decrement
-        η *= opt.η₋
+        # Check descent
+        stats.f_evals += 1
 
-        # Check step-size
-        if η < sqrt(eps(R))
-            status = false
+        @. s = x + η*p
+
+        # Armijo condition
+        if obj.f(s) ≤ f0 + η*c*gTp
+            status = true
+            break
+        else
+            η *= opt.η₋ # decrease stepsize
+            p_norm *= opt.η₋
         end
     end
 
-    return p, status
+    return status, η, M
 end

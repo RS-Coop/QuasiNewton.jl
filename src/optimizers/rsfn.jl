@@ -33,7 +33,7 @@ mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: Quasi
     M::R # local Hessian Lipschitz constant
     const M₊::R # M increase factor
     const M₋::R # M decrease factor
-    const η::R # step-size
+    const η::R # stepsize
     const η₋::R # η decrease factor
     const η_min::R # minimum η
     const linesearch!::F # linesearch function
@@ -75,7 +75,7 @@ function RSFNOptimizer(dim::Int;
     @assert 1 ≤ M₊ && 0 < M₋ ≤ 1
 
     # Linesearch parameters
-    if isnothing(linesearch) || iszero(M)
+    if isnothing(linesearch)
         @assert 0 < η ≤ 1
         linesearch = fixed_step!
     else
@@ -316,8 +316,6 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Hermitian Lanczos: Unitary tridiagonalization
     Q, T, βₖ₊₁ = lanczos(solver.workspace, obj.H, obj.g, solver.depth, reorthogonalize=false)
 
-    update_k!(stats, solver.depth)
-
     # Symmetric tridgiagonal eigendecomposition
     E = Eigen(LAPACK.stev!('V', T.dv, T.ev)...)
 
@@ -381,6 +379,7 @@ function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stat
     # Stats
     update_M!(stats, M)
     update_r!(stats, r_norm)
+    update_k!(stats, solver.depth)
 
     # Update
     if status
@@ -492,10 +491,11 @@ function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective,
 end
 
 #########################################################
-# Backtracking linesearch
+# Linesearch
 #########################################################
 
-
+"""
+"""
 function fixed_step!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
     M = opt.M
     p, _ = p!(M)
@@ -504,22 +504,21 @@ function fixed_step!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
 end
 
 """
-Perform in-place linesearch on step-size and/or regularization.
+Perform in-place linesearch on stepsize and/or regularization.
 
 # Arguments
 - `opt::RSFNOptimizer`: Optimizer instance.
 - `x::S`: Current iterate.
-- `p::S`: Search direction.
+- `p!::F`: Search function.
 - `obj:Objective`: Objective function instance.
 - `stats::QuasiNewtonStats`: Optimization Statistics
 
 # Updates
-- `opt.solver.p` with scaled search direction.
 - `opt.M` with updated regularization.
 
 # Returns
 - `status::Bool`: `true` if a satisfactory step was found.
-- `η::Float`: Accepted step-size.
+- `η::Float`: Accepted stepsize.
 - `M::Float`: Accepted regularization.
 """
 function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
@@ -562,7 +561,7 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
             status = true
             break
         else
-            η *= opt.η₋ # decrease step-size
+            η *= opt.η₋ # decrease stepsize
             p_norm *= opt.η₋
         end
 
@@ -572,6 +571,62 @@ function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::Qua
             p, dec = p!(M)
             p_norm = twonorm(p)
             η = one(R)
+        end
+    end
+
+    return status, η, M
+end
+
+"""
+Perform a backtracking Armijo line search.
+
+# Arguments
+- `opt::RSFNOptimizer`: Optimizer instance.
+- `x::S`: Current iterate.
+- `p!::F`: Search function.
+- `obj:Objective`: Objective function instance.
+- `stats::QuasiNewtonStats`: Optimization Statistics
+
+# Returns
+- `status::Bool`: `true` if a satisfactory step was found.
+- `η::Float`: Accepted stepsize.
+- `M::Float`: Accepted regularization.
+"""
+function backtrack_armijo(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+    
+    # Setup
+    status = false
+    f0  = obj.fval
+    η = one(R)
+    M = opt.M
+    c = R(1e-4)
+
+    p, _ = p!(M)
+    p_norm = twonorm(p)
+
+    gTp = dot(obj.g, p)
+
+    s = similar(x)
+
+    # Backtrack
+    while !status
+        # Check search direction
+        if isnan(p_norm) || p_norm ≤ eps(R)
+            break
+        end
+
+        # Check descent
+        stats.f_evals += 1
+
+        @. s = x + η*p
+
+        # Armijo condition
+        if obj.f(s) ≤ f0 + η*c*gTp
+            status = true
+            break
+        else
+            η *= opt.η₋ # decrease stepsize
+            p_norm *= opt.η₋
         end
     end
 
