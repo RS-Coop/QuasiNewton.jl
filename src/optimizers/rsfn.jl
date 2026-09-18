@@ -62,12 +62,12 @@ Constructor for `RSFNOptimizer`.
 - `RSFNOptimizer` instance.
 """
 function RSFNOptimizer(dim::Int;
-    solver::Solver=LFASolver,
-    M::R1=NaN, M₊::R2=1e1, M₋::R2=0.25,
-    η::R2=1.0, η₋::R2=0.5, η_min::R2=0.03125,
-    linesearch::F=linesearch!,
-    atol::R2=1e-5, rtol::R2=1e-6,
-    kwargs...
+                        solver::Solver=LFASolver,
+                        M::R1=NaN, M₊::R2=1e1, M₋::R2=0.25,
+                        η::R2=1.0, η₋::R2=0.5, η_min::R2=0.03125,
+                        linesearch::F=linesearch!,
+                        atol::R2=1e-5, rtol::R2=1e-6,
+                        kwargs...
     ) where {Solver, R1<:Real, F, R2<:AbstractFloat}
     
     # Hessian Lipschitz constant
