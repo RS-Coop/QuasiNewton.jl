@@ -1,7 +1,7 @@
 #=
 Author: Cooper Simpson
 
-SFN optimizer.
+Quasinewton minimization procedure (optimizer agnostic).
 =#
 
 export minimize!
@@ -14,32 +14,35 @@ export minimize!
 Performs the core iteration loop to minimize a scalar function `f`.
 
 # Arguments
-- `opt::QuasiNewtonOptimizer`: Configured optimizer instance.
-- `x::AbstractVector`: Initial guess for the solution; updated in-place.
-- `obj:Objective`: Objective function instance.
-- `max_iter::Int`: Maximum number of iterations.
-- `max_time::T`: Maximum allowed runtime.
-- `history::Bool`: If true, stores iteration history.
+- `opt::QuasiNewtonOptimizer`: Configured optimizer instance
+- `x::AbstractVector`: Initial guess for the solution; updated in-place
+- `obj:Objective`: Objective function instance
+- `max_iter::Int`: Maximum number of iterations
+- `max_time::T`: Maximum allowed runtime
+- `history::Bool`: If true, stores iteration history
 
 # Updates
-- `x` with approximate solution.
+- `x` with approximate solution
 
 # Returns
 - `stats`: A `QuasiNewtonStats` object containing:
-  - `converged::Bool`: Whether optimization converged.
-  - `iterations::Int`: Number of iterations performed.
-  - `f_evals::Int`: Number of function evaluations.
-  - `g_evals::Int`: Number of gradient evaluations.
-  - `hvp_evals::Int`: Number of Hessian-vector product evaluations.
-  - `runtime::Float64`: Total time spent in seconds.
-  - `f_seq::Vector{R}`: Function values if `history=true`.
-  - `g_seq::Vector{R}`: Gradient norms if `history=true`.
-  - `r_seq::Vector{R}`: Residual norms (e.g., Krylov solver) if `history=true`.
-  - `λ_seq::Vector{R}`: Regularization values if `history=true`.
-  - `k_seq::Vector{Int}`: Krylov iteration counts if `history=true`.
-  - `status::String`: Exit status.
+  - `converged::Bool`: Whether optimization converged
+  - `iterations::Int`: Number of iterations performed
+  - `f_evals::Int`: Number of function evaluations
+  - `g_evals::Int`: Number of gradient evaluations
+  - `hvp_evals::Int`: Number of Hessian-vector product evaluations
+  - `runtime::Float64`: Total time spent in seconds
+  - `f_seq::Vector{R}`: Function values if `history=true`
+  - `g_seq::Vector{R}`: Gradient norms if `history=true`
+  - `r_seq::Vector{R}`: Residual norms (e.g., Krylov solver) if `history=true`
+  - `λ_seq::Vector{R}`: Regularization values if `history=true`
+  - `k_seq::Vector{Int}`: Krylov iteration counts if `history=true`
+  - `status::String`: Exit status
 """
-function minimize!(opt::Opt, x::S, obj::Objective; max_iter::Int, max_time::T, history::Bool) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, T}
+function minimize!(opt::Opt, x::S, obj::Objective;
+                    max_iter::Int, max_time::T, history::Bool
+    ) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, T}
+    
     # Start time
     tic = time_ns()
     

@@ -12,13 +12,13 @@ Author: Cooper Simpson
 (Regularized) Newton optimizer.
 
 # Fields
-- `solver::QuasiNewtonSolver`: Solver for computing the search direction.
-- `M::AbstractFloat`: Hessian regularization scaling.
-- `linesearch!::Function`: Linesearch function.
-- `η::AbstractFloat`: Step size.
-- `η₋::AbstractFloat`: Linesearch reduction factor.
-- `atol::AbstractFloat`: Absolute gradient tolerance.
-- `rtol::AbstractFloat`: Relative gradient tolerance.
+- `solver::QuasiNewtonSolver`: Solver for computing the search direction
+- `M::AbstractFloat`: Hessian regularization scaling
+- `linesearch!::Function`: Linesearch function
+- `η::AbstractFloat`: Stepsize
+- `η₋::AbstractFloat`: Linesearch reduction factor
+- `atol::AbstractFloat`: Absolute gradient tolerance
+- `rtol::AbstractFloat`: Relative gradient tolerance
 """
 mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: QuasiNewtonOptimizer
     const solver::Q # search direction solver
@@ -34,20 +34,29 @@ end
 Constructor for `NewtonOptimizer`.
 
 # Arguments
-- `dim::Int`: Problem dimension.
-- `posdef::Bool`: Whether Hessian is positive definite (default: `false`).
-- `M::Float`: Hessian regularization scaling (default: `0.0`).
-- `linesearch::Function`: Linesearch function (default: `backtrack_armijo`).
-- `η::Float`: Step size in (0,1] (default: `1.0`).
-- `η₋::Float`: Linesearch reduction factor in (0,1) (default: `0.5`).
-- `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
-- `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
-- `kwargs`: Keyword arguments passed to solver constructor.
+- `dim::Int`: Problem dimension
+- `posdef::Bool`: Whether Hessian is positive definite (default: `false`)
+- `M::Float`: Hessian regularization scaling (default: `0.0`)
+- `linesearch::Function`: Linesearch function (default: `backtrack_armijo`)
+- `η::Float`: Stepsize in (0,1] (default: `1.0`)
+- `η₋::Float`: Linesearch reduction factor in (0,1) (default: `0.5`)
+- `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`)
+- `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`)
+- `kwargs`: Keyword arguments passed to solver constructor
 
 # Returns
-- `NewtonOptimizer` instance.
+- `NewtonOptimizer` instance
 """
-function NewtonOptimizer(dim::Int; posdef::Bool=false, M::R1=0., linesearch::F=backtrack_armijo, η::R2=1.0, η₋::R2=1/sqrt(2), atol::R2=1e-5, rtol::R2=1e-6, kwargs...) where {R1<:Real, F, R2<:AbstractFloat}
+function NewtonOptimizer(dim::Int;
+                            posdef::Bool=false,
+                            M::R1=0.,
+                            linesearch::F=backtrack_armijo,
+                            η::R2=1.0,
+                            η₋::R2=1/sqrt(2),
+                            atol::R2=1e-5,
+                            rtol::R2=1e-6,
+                            kwargs...
+    ) where {R1<:Real, F, R2<:AbstractFloat}
 
     # Hessian Lipschitz constant
     @assert isnan(M) || 0≤M
@@ -68,9 +77,9 @@ end
 Perform setup operations before beginning optimization process.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer instance.
-- `x::S`: Current iterate.
-- `obj:Objective`: Objective function instance.
+- `opt::NewtonOptimizer`: Optimizer instance
+- `x::S`: Current iterate
+- `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization Statistics
 
 # Updates
@@ -79,7 +88,12 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::NewtonOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+@inline function setup!(opt::NewtonOptimizer,
+                        x::S,
+                        obj::Objective,
+                        stats::QuasiNewtonStats
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
+
     # Estimate regularization
     if isnan(opt.M)
         M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
@@ -97,7 +111,7 @@ Compute regularization parameter for Newton optimizer.
 - `g_norm::Real`: Gradient norm.
 
 # Returns
-- `λ::Real`: Regularization parameter.
+- `λ::Real`: Regularization parameter
 """
 @inline function regularizer(opt::NewtonOptimizer, M::R, g_norm::R) where {R<:AbstractFloat}
     return iszero(M) ? zero(R) : clamp(sqrt(M*g_norm), eps(R), R(1e16))
@@ -111,14 +125,14 @@ end
 Newton solver using Krylov.jl.
 
 Uses:
-- CG Lanczos for positive definite systems.
-- SYMMLQ for indefinite systems.
+- CG Lanczos for positive definite systems
+- SYMMLQ for indefinite systems
 
 # Fields
-- `workspace::KrylovWorkspace`: Workspace for Krylov iterations.
-- `posdef::Bool`: Whether the system is positive definite.
-- `krylov_order::Int`: Maximum Krylov subspace size.
-- `p::Vector`: Search direction.
+- `workspace::KrylovWorkspace`: Workspace for Krylov iterations
+- `posdef::Bool`: Whether the system is positive definite
+- `krylov_order::Int`: Maximum Krylov subspace size
+- `p::Vector`: Search direction
 """
 struct NewtonSolver{W<:KrylovWorkspace} <: QuasiNewtonSolver
     workspace::W # krylov workspace
@@ -142,15 +156,20 @@ end
 Constructor for `NewtonSolver`.
 
 # Arguments
-- `dim::Int`: Problem dimension.
-- `type`: Vector type (default: `Vector{Float64}`).
-- `krylov_order::Int`: Maximum Krylov iterations (default: `0`).
-- `posdef::Bool`: Whether the system is positive definite.
+- `dim::Int`: Problem dimension
+- `type`: Vector type (default: `Vector{Float64}`)
+- `krylov_order::Int`: Maximum Krylov iterations (default: `0`)
+- `posdef::Bool`: Whether the system is positive definite
 
 # Returns
-- `NewtonSolver` instance with correct Krylov solver.
+- `NewtonSolver` instance with correct Krylov solver
 """
-@inline function NewtonSolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, krylov_order::Int=0, posdef::Bool=false)
+@inline function NewtonSolver(dim::Int;
+                                type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64},
+                                krylov_order::Int=0,
+                                posdef::Bool=false
+    )
+
     return posdef ? newton_solver(dim, type, krylov_order, Val(true)) : newton_solver(dim, type, krylov_order, Val(false))
 end
 
@@ -158,18 +177,24 @@ end
 Compute a single Newton step using `NewtonSolver`.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer.
-- `solver::NewtonSolver`: Solver instance.
-- `x::S`: Current iterate.
-- `obj:Objective`: Objective function instance.
-- `stats::QuasiNewtonStats`: Optimization statistics.
-- `max_time::Real`: Maximum allowed time (optional).
+- `opt::NewtonOptimizer`: Optimizer
+- `solver::NewtonSolver`: Solver instance
+- `x::S`: Current iterate
+- `obj:Objective`: Objective function instance
+- `stats::QuasiNewtonStats`: Optimization statistics
+- `max_time::Real`: Maximum allowed time (optional)
 
 # Updates
-- `x` updated iterate.
-- `stats` with iteration info.
+- `x` updated iterate
+- `stats` with iteration info
 """
-function step!(opt::NewtonOptimizer, solver::NewtonSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function step!(opt::NewtonOptimizer,
+                solver::NewtonSolver,
+                x::S,
+                obj::Objective,
+                stats::QuasiNewtonStats;
+                max_time=Inf
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Regularization
     λ = regularizer(opt, opt.M, obj.g_norm)
@@ -214,20 +239,25 @@ end
 Perform a backtracking Armijo line search.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer instance.
-- `x::S`: Current iterate.
-- `p::F`: Step function.
-- `obj:Objective`: Objective function instance.
+- `opt::NewtonOptimizer`: Optimizer instance
+- `x::S`: Current iterate
+- `p::F`: Step function
+- `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization Statistics
 
 # Updates
-- `opt.solver.p` with scaled search direction.
-- `opt.M` with updated regularization.
+- `opt.solver.p` with scaled search direction
+- `opt.M` with updated regularization
 
 # Returns
-- `status::Bool`: Always returns `true`.
+- `status::Bool`: Always returns `true`
 """
-function backtrack_armijo(opt::NewtonOptimizer, p::S, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function backtrack_armijo(opt::NewtonOptimizer,
+                            p::S,
+                            x::S,
+                            obj::Objective,
+                            stats::QuasiNewtonStats
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Setup
     status = false

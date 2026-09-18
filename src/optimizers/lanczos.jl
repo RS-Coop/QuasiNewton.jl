@@ -22,7 +22,10 @@ end
 
 """
 """
-function lanczos(Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+function lanczos(Z::M, ω::S, k::Int;
+                    reorthogonalize::Bool=false
+    ) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+
     m, n = size(Z)
 	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
 
@@ -45,7 +48,10 @@ Scalar Lanczos process.
 - `k::Int`: Krylov subspace depth
 - `reorthogonalize::Bool`: Whether to perform partial reorthogonalization.
 """
-function lanczos(workspace::LanczosWorkspace{R}, Z::M, ω::S, k::Int; reorthogonalize::Bool=false) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+function lanczos(workspace::LanczosWorkspace{R}, Z::M, ω::S, k::Int;
+                    reorthogonalize::Bool=false
+    ) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+
 	m, n = size(Z)
 	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
 
@@ -120,7 +126,10 @@ Block Lanczos process.
 - `k::Int`: Krylov subspace depth
 - `reorthogonalize::Bool`: Whether to perform partial reorthogonalization.
 """
-function block_lanczos(Z::M1, Ω::M2, k::Int; reorthogonalize::Bool=false) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
+function block_lanczos(Z::M1, Ω::M2, k::Int;
+                        reorthogonalize::Bool=false
+    ) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
+
     m, n = size(Z)
 	p, b = size(Ω)
     m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
@@ -199,7 +208,9 @@ end
 """
 Potentially an improved Block Lanczos function. Not tested or guaranteed to work at all.
 """
-function block_lanczos_fa(Z::M1, Ω::M2, k::Int; reorthogonalize::Bool=false) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
+function block_lanczos_fa(Z::M1, Ω::M2, k::Int;
+                            reorthogonalize::Bool=false
+    ) where {R<:AbstractFloat, M1<:AbstractMatrix{R}, M2<:AbstractMatrix{R}}
 
     m, n = size(Z)
     p, b = size(Ω)

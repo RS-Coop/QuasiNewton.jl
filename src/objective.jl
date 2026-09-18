@@ -14,12 +14,12 @@ export Objective
 Objective function.
 
 # Fields
-- `fval::R`: Current function value at `x`.
-- `g::S`: Gradient vector at `x`.
-- `g_norm::R`: Gradient norm.
-- `f::Function`: Objective function.
-- `fg!::Function`: In-place gradient function.
-- `H::Hv`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`).
+- `fval::R`: Current function value at `x`
+- `g::S`: Gradient vector at `x`
+- `g_norm::R`: Gradient norm
+- `f::Function`: Objective function
+- `fg!::Function`: In-place gradient function
+- `H::Hv`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`)
 """
 mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, Hv<:HvpOperator}
     fval::R # function value
@@ -32,10 +32,10 @@ end
 
 """
 # Arguments
-- `x::AbstractVector`: Initial guess for the solution.
-- `f::Function`: Objective function.
-- `fg!::Function`: In-place gradient function.
-- `H::Function`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`).
+- `x::AbstractVector`: Initial guess for the solution
+- `f::Function`: Objective function
+- `fg!::Function`: In-place gradient function
+- `H::Function`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`)
 """
 function Objective(x::S, f::F1, fg!::F2, H::Hv) where {R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, Hv<:HvpOperator}
     g = similar(x)
@@ -47,10 +47,10 @@ end
 
 """
 # Arguments
-- `x::AbstractVector`: Initial guess for the solution.
-- `f::Function`: Objective function.
-- `fg!::Function`: In-place gradient function.
-- `Hf::Function`: Function that computes Hessian-vector products.
+- `x::AbstractVector`: Initial guess for the solution
+- `f::Function`: Objective function
+- `fg!::Function`: In-place gradient function
+- `Hf::Function`: Function that computes Hessian-vector products
 """
 function Objective(x::S, f::F1, fg!::F2, Hf::F3) where {R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, F3}
     H = LHvpOperator(Hf, x)
@@ -60,9 +60,9 @@ end
 
 """
 # Arguments
-- `x::AbstractVector`: Initial guess for the solution.
-- `f::Function`: Objective function.
-- `ad_backend`: Automatic differentiation backend.
+- `x::AbstractVector`: Initial guess for the solution
+- `f::Function`: Objective function
+- `ad_backend`: Automatic differentiation backend
 """
 function Objective(x::S, f::F, ad_backend::AD) where {R<:AbstractFloat, S<:AbstractVector{R}, F, AD}
     prep = prepare_gradient(f, ad_backend, x)

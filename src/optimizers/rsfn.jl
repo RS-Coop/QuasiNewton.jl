@@ -10,7 +10,7 @@ include("lanczos.jl")
 # R-SFN Optimizer
 #########################################################
 
-
+# Fixed theoretical descent constants
 const ρ_GLOBAL = (1-3*sqrt(3))/6
 const ρ_LOCAL = -1/4
 
@@ -18,15 +18,15 @@ const ρ_LOCAL = -1/4
 Regularized Saddle-Free Newton (R-SFN) optimizer.
 
 # Fields
-- `solver::QuasiNewtonSolver`: Solver for computing the search direction.
-- `M::AbstractFloat`: local Hessian Lipschitz constant.
-- `linesearch!::Function`: Linesearch function.
-- `η::AbstractFloat`: Step size.
-- `M₊::AbstractFloat`: M increase factor.
-- `M₋::AbstractFloat`: M decrease factor.
-- `η₋::AbstractFloat`: η decrease factor.
-- `atol::AbstractFloat`: Absolute gradient tolerance.
-- `rtol::AbstractFloat`: Relative gradient tolerance.
+- `solver::QuasiNewtonSolver`: Solver for computing the search direction
+- `M::AbstractFloat`: local Hessian Lipschitz constant
+- `linesearch!::Function`: Linesearch function
+- `η::AbstractFloat`: Stepsize
+- `M₊::AbstractFloat`: M increase factor
+- `M₋::AbstractFloat`: M decrease factor
+- `η₋::AbstractFloat`: η decrease factor
+- `atol::AbstractFloat`: Absolute gradient tolerance
+- `rtol::AbstractFloat`: Relative gradient tolerance
 """
 mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: QuasiNewtonOptimizer
     const solver::Q # search direction solver
@@ -45,21 +45,21 @@ end
 Constructor for `RSFNOptimizer`.
 
 # Arguments
-- `dim::Int`: Problem dimension.
-- `solver`: Search direction solver type (default: `LFASolver`).
-- `M::Float`: Hessian Lipschitz constant (default: `NaN` for auto-estimation).
-- `η::Float`: Step size in (0,1] (default: `1.0`).
-- `M₊::Float`: M increase factor in [1,∞) (default: `2.0`).
-- `M₋::Float`: M decrease factor in (0,1] (default: `0.25`).
-- `η₋::Float`: η decrease factor in (0,1) (default: `0.5`).
-- `η_min::Float`: Minimum η in (0,1] (default: `1e-2`).
-- `linesearch::Function`: Optional linesearch function (default: `search_η!`).
-- `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`).
-- `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`).
-- `kwargs`: Keyword arguments passed to solver constructor.
+- `dim::Int`: Problem dimension
+- `solver`: Search direction solver type (default: `LFASolver`)
+- `M::Float`: Hessian Lipschitz constant (default: `NaN` for auto-estimation)
+- `η::Float`: Stepsize in (0,1] (default: `1.0`)
+- `M₊::Float`: M increase factor in [1,∞) (default: `2.0`)
+- `M₋::Float`: M decrease factor in (0,1] (default: `0.25`)
+- `η₋::Float`: η decrease factor in (0,1) (default: `0.5`)
+- `η_min::Float`: Minimum η in (0,1] (default: `1e-2`)
+- `linesearch::Function`: Optional linesearch function (default: `search_η!`)
+- `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`)
+- `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`)
+- `kwargs`: Keyword arguments passed to solver constructor
 
 # Returns
-- `RSFNOptimizer` instance.
+- `RSFNOptimizer` instance
 """
 function RSFNOptimizer(dim::Int;
                         solver::Solver=LFASolver,
@@ -103,7 +103,12 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::RSFNOptimizer, x::S, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+@inline function setup!(opt::RSFNOptimizer,
+                        x::S,
+                        obj::Objective,
+                        stats::QuasiNewtonStats
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
+
     # Estimate regularization
     if isnan(opt.M)
         samples = 1 #ceil(Int, log2(length(x)))
@@ -118,11 +123,11 @@ end
 Compute regularization parameter for R-SFN.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer.
-- `g_norm::Real`: Gradient norm.
+- `opt::RSFNOptimizer`: Optimizer
+- `g_norm::Real`: Gradient norm
 
 # Returns
-- `λ::Real`: Regularization parameter.
+- `λ::Real`: Regularization parameter
 """
 @inline function regularizer(opt::RSFNOptimizer, M::R, g_norm::R) where {R<:AbstractFloat}
     return iszero(M) ? zero(R) : clamp(M*g_norm, eps(R), R(1e32))
@@ -136,8 +141,8 @@ end
 Full eigendecomposition R-SFN search direction solver.
 
 # Fields
-- `p::Vector`: Search direction.
-- `cache::Vector`: Temporary memory.
+- `p::Vector`: Search direction
+- `cache::Vector`: Temporary memory
 """
 struct EigenSolver{S<:AbstractVector{<:AbstractFloat}, M<:AbstractMatrix{<:AbstractFloat}}  <: QuasiNewtonSolver
     eigenstep::Bool # add eigenstep in negative eigenspace
@@ -150,13 +155,17 @@ end
 Constructor for `EigenSolver`.
 
 # Arguments
-- `dim::Int`: Problem dimension.
-- `type`: Vector type (default: `Vector{Float64}`).
+- `dim::Int`: Problem dimension
+- `type`: Vector type (default: `Vector{Float64}`)
 
 # Returns
-- `EigenSolver` instance.
+- `EigenSolver` instance
 """
-function EigenSolver(dim::Int; type::Type{<:AbstractVector{R}}=Vector{Float64}, eigenstep::Bool=false) where {R<:AbstractFloat}
+function EigenSolver(dim::Int;
+                        type::Type{<:AbstractVector{R}}=Vector{Float64},
+                        eigenstep::Bool=false
+    ) where {R<:AbstractFloat}
+
     return EigenSolver(eigenstep, type(undef, dim), type(undef, dim), Matrix{R}(undef, dim, dim))
 end
 
@@ -164,18 +173,24 @@ end
 Compute a single R-SFN step using `EigenSolver`.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer.
-- `solver::EigenSolver`: Solver instance.
-- `x::S`: Current iterate.
-- `obj:Objective`: Objective function instance.
-- `stats::QuasiNewtonStats`: Optimization statistics.
-- `max_time::Real`: Maximum allowed time (optional).
+- `opt::RSFNOptimizer`: Optimizer
+- `solver::EigenSolver`: Solver instance
+- `x::S`: Current iterate
+- `obj:Objective`: Objective function instance
+- `stats::QuasiNewtonStats`: Optimization statistics
+- `max_time::Real`: Maximum allowed time (optional)
 
 # Updates
-- `x` updated iterate.
-- `stats` with iteration info.
+- `x` updated iterate
+- `stats` with iteration info
 """
-function step!(opt::RSFNOptimizer, solver::EigenSolver, x::S, obj::Objective, stats::QuasiNewtonStats; max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function step!(opt::RSFNOptimizer,
+                solver::EigenSolver,
+                x::S,
+                obj::Objective,
+                stats::QuasiNewtonStats;
+                max_time=Inf
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Eigendecomposition
     E = eigen!(Matrix!(solver.H_cache, obj.H))
@@ -232,13 +247,13 @@ end
 Lanczos-based R-SFN search direction solver.
 
 # Fields
-- `depth::Int`: Krylov depth.
-- `min_depth::Int`: Minimum Krylov depth.
-- `max_depth::Int`: Maximum Krylov depth.
-- `inc_depth::Int`: Krylov depth increase factor.
-- `dec_depth::Int`: Krylov depth decrease factor.
-- `eigenstep::Bool`: Whether to add eigenstep.
-- `p::Vector`: Search direction.
+- `depth::Int`: Krylov depth
+- `min_depth::Int`: Minimum Krylov depth
+- `max_depth::Int`: Maximum Krylov depth
+- `inc_depth::Int`: Krylov depth increase factor
+- `dec_depth::Int`: Krylov depth decrease factor
+- `eigenstep::Bool`: Whether to add eigenstep
+- `p::Vector`: Search direction
 """
 mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewtonSolver
     depth::Int # krylov depth
@@ -257,24 +272,28 @@ end
 Constructor for `LFASolver`.
 
 # Arguments
-- `dim::Int`: Problem dimension.
-- `type`: Vector type (default: `Vector{Float64}`).
-- `depth::Int`: Target Krylov subspace depth (default: `ceil(log2(dim))`).
-- `adapt::Bool`: Whether to adapt Krylov depth dynamically (default: `true`).
-- `min_depth::Int`: Minimum Krylov depth if `adapt=true` (default: `2`).
-- `max_depth::Int`: Maximum Krylov depth if `adapt=true` (default: `dim`).
-- `inc_depth::Int`: Krylov depth increase factor (default: `1.5`).
-- `dec_depth::Int`: Krylov depth decrease factor (default: `0.5`).
-- `eigenstep::Bool`: Whether to add eigenstep (default: `true`).
+- `dim::Int`: Problem dimension
+- `type`: Vector type (default: `Vector{Float64}`)
+- `depth::Int`: Target Krylov subspace depth (default: `ceil(log2(dim))`)
+- `adapt::Bool`: Whether to adapt Krylov depth dynamically (default: `true`)
+- `min_depth::Int`: Minimum Krylov depth if `adapt=true` (default: `2`)
+- `max_depth::Int`: Maximum Krylov depth if `adapt=true` (default: `dim`)
+- `inc_depth::Int`: Krylov depth increase factor (default: `1.5`)
+- `dec_depth::Int`: Krylov depth decrease factor (default: `0.5`)
+- `eigenstep::Bool`: Whether to add eigenstep (default: `true`)
 
 # Returns
-- `LFASolver` instance.
+- `LFASolver` instance
 """
 function LFASolver(dim::Int;
-    type::Type{<:AbstractVector{R}}=Vector{Float64},
-    depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)),
-    adapt::Bool=true, max_depth::Int=dim, min_depth::Int=2, inc_depth::R=2.0, dec_depth::R=0.5,
-    eigenstep::Bool=true
+                    type::Type{<:AbstractVector{R}}=Vector{Float64},
+                    depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)),
+                    adapt::Bool=true,
+                    max_depth::Int=dim,
+                    min_depth::Int=2,
+                    inc_depth::R=2.0,
+                    dec_depth::R=0.5,
+                    eigenstep::Bool=true
     ) where {R<:AbstractFloat}
 
     @assert 1 ≤ depth ≤ dim
@@ -291,27 +310,33 @@ function LFASolver(dim::Int;
 
     workspace = LanczosWorkspace{R}(dim, max_depth)
 
-    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, 
-                        eigenstep, type(undef, dim), type(undef, max_depth), type(undef, max_depth), workspace)
+    return LFASolver(depth, min_depth, max_depth, inc_depth, dec_depth, eigenstep, type(undef, dim), type(undef, max_depth), type(undef, max_depth), workspace)
 end
 
 """
 Compute a single R-SFN step using `LFASolver`.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer.
-- `solver::LFASolver`: Solver instance.
-- `x::S`: Current iterate.
-- `obj:Objective`: Objective function instance.
-- `stats::QuasiNewtonStats`: Optimization statistics.
-- `tol::Real`: Step tolerance (optional).
-- `max_time::Real`: Maximum allowed time (optional).
+- `opt::RSFNOptimizer`: Optimizer
+- `solver::LFASolver`: Solver instance
+- `x::S`: Current iterate
+- `obj:Objective`: Objective function instance
+- `stats::QuasiNewtonStats`: Optimization statistics
+- `tol::Real`: Step tolerance (optional)
+- `max_time::Real`: Maximum allowed time (optional)
 
 # Updates
-- `x` updated iterate.
-- `stats` with iteration info.
+- `x` updated iterate
+- `stats` with iteration info
 """
-function step!(opt::RSFNOptimizer, solver::LFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function step!(opt::RSFNOptimizer,
+                solver::LFASolver,
+                x::S,
+                obj::Objective,
+                stats::QuasiNewtonStats;
+                tol::R=NaN,
+                max_time=Inf
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Hermitian Lanczos: Unitary tridiagonalization
     Q, T, βₖ₊₁ = lanczos(solver.workspace, obj.H, obj.g, solver.depth, reorthogonalize=false)
@@ -397,10 +422,10 @@ end
 Block Lanczos R-SFN search direction solver.
 
 # Fields
-- `depth::Int`: Krylov depth.
-- `block_size::Int`: Krylov block size.
-- `Ω::Matrix`: Block right-hand side.
-- `p::Vector`: Search direction.
+- `depth::Int`: Krylov depth
+- `block_size::Int`: Krylov block size
+- `Ω::Matrix`: Block right-hand side
+- `p::Vector`: Search direction
 """
 mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}  <: QuasiNewtonSolver
     depth::Int # krylov depth
@@ -414,15 +439,21 @@ end
 Constructor for `BlockLFASolver`.
 
 # Arguments
-- `dim::Int`: Problem dimension.
-- `type`: Vector type (default: `Vector{Float64}`).
-- `depth::Int`: Target Krylov subspace depth (default: `ceil(log2(dim))`).
-- `block_size::Int`: Number of block vectors for block Lanczos (default: `2`).
+- `dim::Int`: Problem dimension
+- `type`: Vector type (default: `Vector{Float64}`)
+- `depth::Int`: Target Krylov subspace depth (default: `ceil(log2(dim))`)
+- `block_size::Int`: Number of block vectors for block Lanczos (default: `2`)
 
 # Returns
-- `BlockLFASolver` instance.
+- `BlockLFASolver` instance
 """
-function BlockLFASolver(dim::Int; type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64}, depth::Int=ceil(Int, log2(dim)), block_size::Int=2, enrichment::Bool=false)
+function BlockLFASolver(dim::Int;
+                        type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64},
+                        depth::Int=ceil(Int, log2(dim)),
+                        block_size::Int=2,
+                        enrichment::Bool=false
+    )
+
     if block_size > dim
         block_size = min(dim÷depth, block_size)
     end
@@ -434,19 +465,26 @@ end
 Compute a single R-SFN step using `BlockLFASolver`.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer.
-- `solver::BlockLFASolver`: Solver instance.
-- `x::S`: Current iterate.
-- `obj:Objective`: Objective function instance.
-- `stats::QuasiNewtonStats`: Optimization statistics.
-- `tol::Real`: Step tolerance (optional).
-- `max_time::Real`: Maximum allowed time (optional).
+- `opt::RSFNOptimizer`: Optimizer
+- `solver::BlockLFASolver`: Solver instance
+- `x::S`: Current iterate
+- `obj:Objective`: Objective function instance
+- `stats::QuasiNewtonStats`: Optimization statistics
+- `tol::Real`: Step tolerance (optional)
+- `max_time::Real`: Maximum allowed time (optional)
 
 # Updates
-- `x` updated iterate.
-- `stats` with iteration info.
+- `x` updated iterate
+- `stats` with iteration info
 """
-function step!(opt::RSFNOptimizer, solver::BlockLFASolver, x::S, obj::Objective, stats::QuasiNewtonStats; tol::R=NaN, max_time=Inf) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function step!(opt::RSFNOptimizer,
+                solver::BlockLFASolver,
+                x::S,
+                obj::Objective,
+                stats::QuasiNewtonStats;
+                tol::R=NaN,
+                max_time=Inf
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     error("Block LFA not implemented")
 
@@ -496,7 +534,13 @@ end
 
 """
 """
-function fixed_step!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+function fixed_step!(opt::RSFNOptimizer,
+                        x::S,
+                        p!::F,
+                        obj::Objective,
+                        stats::QuasiNewtonStats
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+
     M = opt.M
     p, _ = p!(M)
     
@@ -507,21 +551,26 @@ end
 Perform in-place linesearch on stepsize and/or regularization.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer instance.
-- `x::S`: Current iterate.
-- `p!::F`: Search function.
-- `obj:Objective`: Objective function instance.
+- `opt::RSFNOptimizer`: Optimizer instance
+- `x::S`: Current iterate
+- `p!::F`: Search function
+- `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization Statistics
 
 # Updates
-- `opt.M` with updated regularization.
+- `opt.M` with updated regularization
 
 # Returns
-- `status::Bool`: `true` if a satisfactory step was found.
-- `η::Float`: Accepted stepsize.
-- `M::Float`: Accepted regularization.
+- `status::Bool`: `true` if a satisfactory step was found
+- `η::Float`: Accepted stepsize
+- `M::Float`: Accepted regularization
 """
-function linesearch!(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+function linesearch!(opt::RSFNOptimizer,
+                        x::S,
+                        p!::F,
+                        obj::Objective,
+                        stats::QuasiNewtonStats
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
     status = false
@@ -581,18 +630,23 @@ end
 Perform a backtracking Armijo line search.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer instance.
-- `x::S`: Current iterate.
-- `p!::F`: Search function.
-- `obj:Objective`: Objective function instance.
+- `opt::RSFNOptimizer`: Optimizer instance
+- `x::S`: Current iterate
+- `p!::F`: Search function
+- `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization Statistics
 
 # Returns
-- `status::Bool`: `true` if a satisfactory step was found.
-- `η::Float`: Accepted stepsize.
-- `M::Float`: Accepted regularization.
+- `status::Bool`: `true` if a satisfactory step was found
+- `η::Float`: Accepted stepsize
+- `M::Float`: Accepted regularization
 """
-function backtrack_armijo(opt::RSFNOptimizer, x::S, p!::F, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
+function backtrack_armijo(opt::RSFNOptimizer,
+                            x::S,
+                            p!::F,
+                            obj::Objective,
+                            stats::QuasiNewtonStats
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
     
     # Setup
     status = false

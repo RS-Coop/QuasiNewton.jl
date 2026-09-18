@@ -4,7 +4,7 @@ Author: Cooper Simpson
 QuasiNewton optimizer stats
 =#
 
-using Statistics: mean
+using StatsBase: mean
 
 export QuasiNewtonStats
 

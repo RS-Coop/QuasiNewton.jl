@@ -41,7 +41,7 @@ end
 Form the full Hessian matrix from a Hessian-vector product operator.
 
 # Returns
-- `Hermitian{R, Matrix{R}}`: Full Hermitian matrix representation of the Hessian.
+- `Hermitian{R, Matrix{R}}`: Full Hermitian matrix representation of the Hessian
 """
 @inline function Base.Matrix(H::HvpOperator{R}) where {R}
 	n = size(H, 1)
@@ -71,11 +71,11 @@ end
 Out-of-place matrix-vector multiplication with Hessian-vector product operator.
 
 # Arguments
-- `H::HvpOperator{R}`: Hessian operator.
-- `v::AbstractVector{R}`: Right-hand side vector.
+- `H::HvpOperator{R}`: Hessian operator
+- `v::AbstractVector{R}`: Right-hand side vector
 
 # Returns
-- `y::Vector{R}`: Result of `H*v`.
+- `y::Vector{R}`: Result of `H*v`
 """
 @inline function *(H::HvpOperator{R}, v::AbstractVector{R}) where {R}
 	y = similar(v)
@@ -87,11 +87,11 @@ end
 Out-of-place matrix-matrix multiplication with Hessian-vector product operator.
 
 # Arguments
-- `H::HvpOperator{R}`: Hessian operator.
-- `V::AbstractMatrix{R}`: Right-hand side matrix.
+- `H::HvpOperator{R}`: Hessian operator
+- `V::AbstractMatrix{R}`: Right-hand side matrix
 
 # Returns
-- `Y::Matrix{R}`: Result of `H*V`.
+- `Y::Matrix{R}`: Result of `H*V`
 """
 @inline function *(H::HvpOperator{R}, V::AbstractMatrix{R}) where {R}
 	Y = similar(V)
@@ -103,12 +103,12 @@ end
 In-place matrix-matrix multiplication with Hessian-vector product operator.
 
 # Arguments
-- `Y::AbstractMatrix{R}`: Storage for result.
-- `H::HvpOperator{R}`: Hessian operator.
-- `V::AbstractMatrix{R}`: Right-hand side matrix.
+- `Y::AbstractMatrix{R}`: Storage for result
+- `H::HvpOperator{R}`: Hessian operator
+- `V::AbstractMatrix{R}`: Right-hand side matrix
 
 # Returns
-- `Y`: Updated with `H*V`.
+- `Y`: Updated with `H*V`
 """
 @inline Base.@propagate_inbounds function LinearAlgebra.mul!(Y::AbstractMatrix{R}, H::HvpOperator{R}, V::AbstractMatrix{R}) where {R}
 	@boundscheck size(Y) == size(V) || throw(DimensionMismatch())
@@ -128,9 +128,9 @@ end
 Hessian-vector product operator compatible with LinearOperators.jl.
 
 # Fields
-- `f::Function`: Function that generates the Hessian operator at a given point.
-- `op::AbstractLinearOperator`: Linear operator representing the Hessian at `x`.
-- `nprod::Int`: Counter of Hessian-vector products applied.
+- `f::Function`: Function that generates the Hessian operator at a given point
+- `op::AbstractLinearOperator`: Linear operator representing the Hessian at `x`
+- `nprod::Int`: Counter of Hessian-vector products applied
 """
 mutable struct LHvpOperator{F<:Function, R, S<:AbstractVector{R}, L<:AbstractLinearOperator{R}} <: HvpOperator{R}
     const f::F
@@ -144,11 +144,11 @@ end
 Constructor for `LHvpOperator`.
 
 # Arguments
-- `f::Function`: Function that builds the Hessian operator.
-- `x::AbstractVector`: Input point at which to evaluate the Hessian.
+- `f::Function`: Function that builds the Hessian operator
+- `x::AbstractVector`: Input point at which to evaluate the Hessian
 
 # Returns
-- `LHvpOperator` instance.
+- `LHvpOperator` instance
 """
 function LHvpOperator(f::F, x::S) where {F, S}
 	op = f(x)
@@ -159,8 +159,8 @@ end
 Update the operator to a new point.
 
 # Arguments
-- `H::LHvpOperator`: Hessian operator.
-- `x::AbstractVector`: New point.
+- `H::LHvpOperator`: Hessian operator
+- `x::AbstractVector`: New point
 """
 @inline function update!(H::LHvpOperator{<:Any, R}, x::S) where {R, S}
 	H.x .= x
@@ -172,9 +172,9 @@ end
 In-place matrix-vector multiplication with `LHvpOperator`.
 
 # Arguments
-- `y::AbstractVector`: Storage for result.
-- `H::LHvpOperator`: Hessian operator.
-- `v::AbstractVector`: Right-hand side vector.
+- `y::AbstractVector`: Storage for result
+- `H::LHvpOperator`: Hessian operator
+- `v::AbstractVector`: Right-hand side vector
 
 # Returns
 - `y`: Updated with `H*v`.
@@ -193,12 +193,12 @@ end
 Hessian-vector product operator compatible with DifferentiationInterface.jl.
 
 # Fields
-- `f::Function`: Scalar-valued function.
-- `x::AbstractVector`: Current point.
-- `ad_backend`: Automatic differentiation backend.
-- `prep`: Prepared AD state for Hessian-vector products.
-- `nprod::Int`: Counter of Hessian-vector products applied.
-- `_x`, `_v`, `_y::Vector`: Internal temporary storage.
+- `f::Function`: Scalar-valued function
+- `x::AbstractVector`: Current point
+- `ad_backend`: Automatic differentiation backend
+- `prep`: Prepared AD state for Hessian-vector products
+- `nprod::Int`: Counter of Hessian-vector products applied
+- `_x`, `_v`, `_y::Vector`: Internal temporary storage
 """
 mutable struct ADHvpOperator{F, R, S<:AbstractVector{R}, P, B} <: HvpOperator{R}
     const f::F
@@ -215,12 +215,12 @@ end
 Constructor for `ADHvpOperator`.
 
 # Arguments
-- `f::Function`: Scalar-valued function.
-- `x::AbstractVector`: Input point.
-- `ad_backend`: Automatic differentiation backend.
+- `f::Function`: Scalar-valued function
+- `x::AbstractVector`: Input point
+- `ad_backend`: Automatic differentiation backend
 
 # Returns
-- `ADHvpOperator` instance.
+- `ADHvpOperator` instance
 """
 function ADHvpOperator(f::F, x::S, ad_backend::B) where {F, R, S<:AbstractVector{R}, B}
 	prep = prepare_hvp_same_point(f, ad_backend, x, (similar(x),))
@@ -231,8 +231,8 @@ end
 Update `ADHvpOperator` to a new input point.
 
 # Arguments
-- `H::ADHvpOperator`: Hessian operator.
-- `x::AbstractVector`: New input point.
+- `H::ADHvpOperator`: Hessian operator
+- `x::AbstractVector`: New input point
 """
 @inline function update!(H::ADHvpOperator, x::S) where {S}
     H.x .= x
@@ -245,12 +245,12 @@ end
 In-place matrix-vector multiplication with `ADHvpOperator`.
 
 # Arguments
-- `y::AbstractVector`: Storage for result.
-- `H::ADHvpOperator`: Hessian operator.
-- `v::AbstractVector`: Right-hand side vector.
+- `y::AbstractVector`: Storage for result
+- `H::ADHvpOperator`: Hessian operator
+- `v::AbstractVector`: Right-hand side vector
 
 # Returns
-- `y`: Updated with `H*v`.
+- `y`: Updated with `H*v`
 """
 @inline Base.@propagate_inbounds function LinearAlgebra.mul!(y::AbstractVector{R}, H::ADHvpOperator{<:Any, R}, v::AbstractVector{R}) where {R}
 	H.nprod += 1
