@@ -19,7 +19,7 @@ Adaptive Regularization with Cubics (ARC) optimizer.
 - `γ1::Float`: Factor to reduce `M` when step unsuccessful
 - `γ2::Float`: Factor to increase `M` when step very successful
 - `atol::Float`: Absolute gradient norm tolerance
-- `rtol::Float`: Relative gradient norm toleranc
+- `rtol::Float`: Relative gradient norm tolerance
 """
 mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, R2<:AbstractFloat} <: QuasiNewtonOptimizer
     const solver::Q # search direction solver
