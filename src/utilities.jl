@@ -119,7 +119,18 @@ end
 """
 Timer
 """
-elapsed(tic::UInt64) = (time_ns()-tic)/1e9
+struct Runtimer
+    start::UInt64
+    limit::Float64
+end
+
+Runtimer(limit::Real=Inf) = Runtimer(time_ns(), Float64(limit))
+
+@inline elapsed(t::Runtimer) = 1e-9*(time_ns() - t.start)
+
+@inline remaining(t::Runtimer) = max(0.0, t.limit - elapsed(t))
+
+@inline overtime(t::Runtimer) = elapsed(t) ≥ t.limit
 
 #########################################################
 

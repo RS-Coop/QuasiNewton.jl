@@ -22,9 +22,7 @@ end
 
 """
 """
-function lanczos(Z::M, ω::S, k::Int;
-                    reorthogonalize::Bool=false
-    ) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+function lanczos(Z::M, ω::S, k::Int; kwargs...) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
 
     m, n = size(Z)
 	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
@@ -35,7 +33,7 @@ function lanczos(Z::M, ω::S, k::Int;
 
     workspace = LanczosWorkspace(Q, d, dl)
 
-    return lanczos(workspace, Z, ω, k; reorthogonalize=reorthogonalize)
+    return lanczos(workspace, Z, ω, k; kwargs...)
 end
 
 """
@@ -49,7 +47,7 @@ Scalar Lanczos process.
 - `reorthogonalize::Bool`: Whether to perform partial reorthogonalization.
 """
 function lanczos(workspace::LanczosWorkspace{R}, Z::M, ω::S, k::Int;
-                    reorthogonalize::Bool=false
+                    reorthogonalize::Bool=false, timer::Runtimer=Runtimer()
     ) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
 
 	m, n = size(Z)
@@ -70,14 +68,21 @@ function lanczos(workspace::LanczosWorkspace{R}, Z::M, ω::S, k::Int;
     copyto!(q₁, ω)
     rmul!(q₁, inv(β₁))
 
-	@views for i = 1:k
-		qᵢ = Q[:,i]
-		qᵢ₊₁ = Q[:,i+1]
+	for i = 1:k
+        if overtime(timer)
+            return @views Q[:,1:i-1],
+                    SymTridiagonal(d[1:i-1], dl[1:i-2]),
+                    i == 1 ? zero(R) : dl[i-1],
+                    false
+        end
+
+		qᵢ = @view Q[:,i]
+		qᵢ₊₁ = @view Q[:,i+1]
 
 		mul!(qᵢ₊₁, Z, qᵢ)
 
 		if i ≥ 2
-			qᵢ₋₁ = Q[:,i-1]
+			qᵢ₋₁ = @view Q[:,i-1]
 			βᵢ = dl[i-1]
 			axpy!(-βᵢ, qᵢ₋₁, qᵢ₊₁)
 		end
@@ -110,7 +115,7 @@ function lanczos(workspace::LanczosWorkspace{R}, Z::M, ω::S, k::Int;
 		dl[i] = βᵢ₊₁
 	end
 
-	return @views Q[:,1:k], SymTridiagonal(d, dl[1:k-1]), dl[end]
+	return @views Q[:,1:k], SymTridiagonal(d, dl[1:k-1]), dl[end], true
 end
 
 #########################################################

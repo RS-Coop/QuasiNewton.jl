@@ -48,7 +48,7 @@ module QuasiNewton
 	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`)
 	- `ad_backend`: Automatic differentiation backend
 	- `max_iter::Int=1000`: Maximum number of iterations
-	- `max_time::R=Inf`: Maximum allowed time
+	- `max_time::Real=Inf`: Maximum allowed time
 	- `history::Bool=false`: If true, stores iteration history
 	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor
 
@@ -59,8 +59,8 @@ module QuasiNewton
 	- `stats`: Optimization statistics including final solution, convergence info, and optionally history
 	"""
 	function minimize!(x::S, f::F, optimizer::Val{optimizer_}, ad_backend;
-						max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F, optimizer_, R}
+						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F, optimizer_}
 
 		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
 		obj = Objective(x, f, ad_backend)
@@ -78,7 +78,7 @@ module QuasiNewton
 	- `H`: Hessian or Hessian-like operator
 	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`)
 	- `max_iter::Int=1000`: Maximum number of iterations
-	- `max_time::R=Inf`: Maximum allowed time
+	- `max_time::Real=Inf`: Maximum allowed time
 	- `history::Bool=false`: If true, stores iteration history
 	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor
 
@@ -89,8 +89,8 @@ module QuasiNewton
 	- `stats`: Optimization statistics including final solution, convergence info, and optionally history
 	"""
 	function minimize!(x::S, f::F1, fg!::F2, H::L, optimizer::Val{optimizer_};
-						max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, optimizer_, R}
+						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, optimizer_}
 
 		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
 		obj = Objective(x, f, fg!, H)
@@ -103,8 +103,8 @@ module QuasiNewton
 	#########################################################
 
 	function newton!(x::S, f::F, ad_backend;
-						max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F, R}
+						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F}
 
 		opt = NewtonOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, ad_backend)
@@ -115,8 +115,8 @@ module QuasiNewton
 	end
 
 	function newton!(x::S, f::F1, fg!::F2, H::L;
-						max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, R}
+						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L}
 
 		opt = NewtonOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, fg!, H)
@@ -131,8 +131,8 @@ module QuasiNewton
 	#########################################################
 
 	function rsfn!(x::S, f::F, ad_backend;
-					max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F, R}
+					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F}
 
 		opt = RSFNOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, ad_backend)
@@ -143,8 +143,8 @@ module QuasiNewton
 	end
 
 	function rsfn!(x::S, f::F1, fg!::F2, H::L;
-					max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, R}
+					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L}
 
 		opt = RSFNOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, fg!, H)
@@ -159,8 +159,8 @@ module QuasiNewton
 	#########################################################
 
 	function arc!(x::S, f::F, ad_backend;
-					max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F, R}
+					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F}
 
 		opt = ARCOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, ad_backend)
@@ -171,8 +171,8 @@ module QuasiNewton
 	end
 
 	function arc!(x::S, f::F1, fg!::F2, H::L;
-					max_iter::Int=1000, max_time::R=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, R}
+					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L}
 		
 		opt = ARCOptimizer(size(x,1); kwargs...)
 		obj = Objective(x, f, fg!, H)

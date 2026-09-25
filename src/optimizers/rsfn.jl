@@ -64,7 +64,7 @@ Constructor for `RSFNOptimizer`.
 function RSFNOptimizer(dim::Int;
                         solver::Solver=LFASolver,
                         M::R1=NaN, M₊::R2=1e1, M₋::R2=0.25,
-                        η::R2=1.0, η₋::R2=0.5, η_min::R2=0.03125,
+                        η::R2=1.0, η₋::R2=0.5, η_min::R2=2^-5,
                         linesearch::F=linesearch!,
                         atol::R2=1e-5, rtol::R2=1e-6,
                         kwargs...
@@ -113,7 +113,7 @@ Perform setup operations before beginning optimization process.
     if isnan(opt.M)
         samples = 1 #ceil(Int, log2(length(x)))
         M_est = estimate_M(x, obj, stats; samples=samples)
-        opt.M = clamp(M_est, R(1e-6), R(1e6))
+        opt.M = clamp(M_est, R(1e-12), R(1e16))
     end
 
     return nothing
@@ -178,7 +178,7 @@ Compute a single R-SFN step using `EigenSolver`.
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization statistics
-- `max_time::Real`: Maximum allowed time (optional)
+- `timer::Runtimer`: Timer struct (optional)
 
 # Updates
 - `x` updated iterate
@@ -189,7 +189,7 @@ function step!(opt::RSFNOptimizer,
                 x::S,
                 obj::Objective,
                 stats::QuasiNewtonStats;
-                max_time=Inf
+                timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Eigendecomposition
@@ -226,9 +226,8 @@ function step!(opt::RSFNOptimizer,
     end
 
     # Linesearch
-    status, η, M = opt.linesearch!(opt, x, p!, obj, stats)
+    η, M, status = opt.linesearch!(opt, x, p!, obj, stats, timer=timer)
 
-    # Stats
     update_M!(stats, M)
 
     # Update
@@ -287,11 +286,11 @@ Constructor for `LFASolver`.
 """
 function LFASolver(dim::Int;
                     type::Type{<:AbstractVector{R}}=Vector{Float64},
-                    depth::Int=dim ≤ 10 ? dim : ceil(Int, log2(dim)),
+                    depth::Int=2, #dim ≤ 10 ? dim : ceil(Int, log2(dim)),
                     adapt::Bool=true,
                     max_depth::Int=dim,
                     min_depth::Int=2,
-                    inc_depth::R=2.0,
+                    inc_depth::R=1.5,
                     dec_depth::R=0.5,
                     eigenstep::Bool=true
     ) where {R<:AbstractFloat}
@@ -323,7 +322,7 @@ Compute a single R-SFN step using `LFASolver`.
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization statistics
 - `tol::Real`: Step tolerance (optional)
-- `max_time::Real`: Maximum allowed time (optional)
+- `timer::Runtimer`: Timer struct (optional)
 
 # Updates
 - `x` updated iterate
@@ -335,11 +334,19 @@ function step!(opt::RSFNOptimizer,
                 obj::Objective,
                 stats::QuasiNewtonStats;
                 tol::R=NaN,
-                max_time=Inf
+                timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Hermitian Lanczos: Unitary tridiagonalization
-    Q, T, βₖ₊₁ = lanczos(solver.workspace, obj.H, obj.g, solver.depth, reorthogonalize=false)
+    Q, T, βₖ₊₁, status = lanczos(solver.workspace, obj.H, obj.g, solver.depth;
+                                    reorthogonalize=false, timer=timer)
+
+    update_k!(stats, solver.depth)
+
+    if !status
+        stats.status = stats.status = "Time limit exceeded"
+        return status
+    end
 
     # Symmetric tridgiagonal eigendecomposition
     E = Eigen(LAPACK.stev!('V', T.dv, T.ev)...)
@@ -374,42 +381,41 @@ function step!(opt::RSFNOptimizer,
     end
 
     # Linesearch
-    status, η, M = opt.linesearch!(opt, x, p!, obj, stats)
+    η, M, status = opt.linesearch!(opt, x, p!, obj, stats; timer=timer)
 
-    # Compute residual
-    # @. cache1 = v1 / E.values
-    @views z = dot(E.vectors[solver.depth,:], cache1)
-    r_norm = abs(obj.g_norm*βₖ₊₁*z)
-    
-    # Tolerance
-    if isnan(tol)
-        ζ = 0.5
-        ξ = R(0.01)
-
-        atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
-        rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
-
-        tol = atol + obj.g_norm*rtol
-    end
-    
-    # Depth change
-    if solver.min_depth != solver.max_depth
-        if r_norm ≥ tol
-            solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.inc_depth))
-        elseif r_norm ≤ R(1e-2)*tol
-            solver.depth = max(solver.min_depth, floor(Int, solver.depth*solver.dec_depth))
-        end
-    end
-
-    # Stats
     update_M!(stats, M)
-    update_r!(stats, r_norm)
-    update_k!(stats, solver.depth)
 
-    # Update
     if status
+        # Compute residual
+        # @. cache1 = v1 / E.values
+        @views z = dot(E.vectors[solver.depth,:], cache1)
+        r_norm = abs(obj.g_norm*βₖ₊₁*z)
+        
+        # Tolerance
+        if isnan(tol)
+            ζ = 0.5
+            ξ = R(0.01)
+
+            atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
+            rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
+
+            tol = atol + obj.g_norm*rtol
+        end
+        
+        # Depth change
+        if solver.min_depth != solver.max_depth
+            if r_norm ≥ tol
+                solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.inc_depth))
+            elseif r_norm ≤ R(1e-2)*tol
+                solver.depth = max(solver.min_depth, floor(Int, solver.depth*solver.dec_depth))
+            end
+        end
+
+        # Update
         @. x += η*solver.p
-    end
+
+        update_r!(stats, r_norm)
+    end   
 
     return status
 end
@@ -471,7 +477,7 @@ Compute a single R-SFN step using `BlockLFASolver`.
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization statistics
 - `tol::Real`: Step tolerance (optional)
-- `max_time::Real`: Maximum allowed time (optional)
+- `timer::Runtimer`: Timer struct (optional)
 
 # Updates
 - `x` updated iterate
@@ -483,7 +489,7 @@ function step!(opt::RSFNOptimizer,
                 obj::Objective,
                 stats::QuasiNewtonStats;
                 tol::R=NaN,
-                max_time=Inf
+                timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     error("Block LFA not implemented")
@@ -518,7 +524,7 @@ function step!(opt::RSFNOptimizer,
     @views mul!(solver.p, Q, cache2, -B1[1,1], zero(R))
     
     # Linesearch
-    η, status = opt.linesearch!(opt, x, solver.p, obj, stats)
+    η, M, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
     # Update
     if status
@@ -538,13 +544,14 @@ function fixed_step!(opt::RSFNOptimizer,
                         x::S,
                         p!::F,
                         obj::Objective,
-                        stats::QuasiNewtonStats
+                        stats::QuasiNewtonStats;
+                        timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     M = opt.M
     p, _ = p!(M)
     
-    return true, opt.η, M
+    return opt.η, M, true
 end
 
 """
@@ -569,7 +576,8 @@ function linesearch!(opt::RSFNOptimizer,
                         x::S,
                         p!::F,
                         obj::Objective,
-                        stats::QuasiNewtonStats
+                        stats::QuasiNewtonStats;
+                        timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
 
     # Setup
@@ -585,8 +593,12 @@ function linesearch!(opt::RSFNOptimizer,
 
     # Backtrack
     while !status
-        # Check search direction
-        if isnan(p_norm) || p_norm ≤ eps(R)
+        # Check exit conditions
+        if overtime(timer) # time limit
+            stats.status = "Time limit exceeded"
+            break
+        elseif isnan(p_norm) || p_norm ≤ eps(R) # search direction
+            stats.status = "Linesearch failure"
             break
         end
         
@@ -601,8 +613,7 @@ function linesearch!(opt::RSFNOptimizer,
                 if isone(η)
                     M*opt.M₋ # decrease regularization
                 else
-                    # opt.M*opt.M₊ # increase regularization
-                    M/η
+                    M/η # increase regularization
                 end
 
             opt.M = clamp(M_est, 1e-12, 1e16)
@@ -615,15 +626,20 @@ function linesearch!(opt::RSFNOptimizer,
         end
 
         # Increase regularization
-        if η < opt.η_min && M < 1e16
-            M *= opt.M₊
-            p, dec = p!(M)
-            p_norm = twonorm(p)
-            η = one(R)
+        if η < opt.η_min
+            if M < 1e16
+                M *= opt.M₊
+                p, dec = p!(M)
+                p_norm = twonorm(p)
+                η = one(R)
+            else
+                stats.status = "Linesearch failure"
+                break
+            end
         end
     end
 
-    return status, η, M
+    return η, M, status
 end
 
 """
@@ -645,12 +661,13 @@ function backtrack_armijo(opt::RSFNOptimizer,
                             x::S,
                             p!::F,
                             obj::Objective,
-                            stats::QuasiNewtonStats
+                            stats::QuasiNewtonStats;
+                            timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
     
     # Setup
     status = false
-    f0  = obj.fval
+    f0 = obj.fval
     η = one(R)
     M = opt.M
     c = R(1e-4)
@@ -666,6 +683,7 @@ function backtrack_armijo(opt::RSFNOptimizer,
     while !status
         # Check search direction
         if isnan(p_norm) || p_norm ≤ eps(R)
+            stats.status = "Linesearch failure"
             break
         end
 
@@ -684,5 +702,5 @@ function backtrack_armijo(opt::RSFNOptimizer,
         end
     end
 
-    return status, η, M
+    return η, M, status
 end

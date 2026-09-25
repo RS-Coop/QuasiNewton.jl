@@ -182,7 +182,7 @@ Compute a single Newton step using `NewtonSolver`.
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization statistics
-- `max_time::Real`: Maximum allowed time (optional)
+- `timer::Runtimer`: Timer struct (optional)
 
 # Updates
 - `x` updated iterate
@@ -193,7 +193,7 @@ function step!(opt::NewtonOptimizer,
                 x::S,
                 obj::Objective,
                 stats::QuasiNewtonStats;
-                max_time=Inf
+                timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Regularization
@@ -208,10 +208,10 @@ function step!(opt::NewtonOptimizer,
 
     # Solve
     if solver.posdef
-        krylov_solve!(solver.workspace, obj.H, -obj.g, [λ], itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
+        krylov_solve!(solver.workspace, obj.H, -obj.g, [λ], itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol)
         p = solution(solver.workspace)[1]
     else
-        krylov_solve!(solver.workspace, obj.H, -obj.g, λ=λ, itmax=solver.krylov_order, timemax=max_time, atol=atol, rtol=rtol)
+        krylov_solve!(solver.workspace, obj.H, -obj.g, λ=λ, itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol)
         p = solution(solver.workspace)
     end
 
@@ -276,6 +276,7 @@ function backtrack_armijo(opt::NewtonOptimizer,
     while !status
         # Check search direction
         if isnan(p_norm) || p_norm ≤ eps(R)
+            stats.status = "Linesearch failure"
             break
         end
 

@@ -18,7 +18,7 @@ Performs the core iteration loop to minimize a scalar function `f`.
 - `x::AbstractVector`: Initial guess for the solution; updated in-place
 - `obj:Objective`: Objective function instance
 - `max_iter::Int`: Maximum number of iterations
-- `max_time::T`: Maximum allowed runtime
+- `max_time::Real`: Maximum allowed runtime
 - `history::Bool`: If true, stores iteration history
 
 # Updates
@@ -40,11 +40,11 @@ Performs the core iteration loop to minimize a scalar function `f`.
   - `status::String`: Exit status
 """
 function minimize!(opt::Opt, x::S, obj::Objective;
-                    max_iter::Int, max_time::T, history::Bool
-    ) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}, T}
+                    max_iter::Int, max_time::Real, history::Bool
+    ) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}}
     
     # Start time
-    tic = time_ns()
+    timer = Runtimer(max_time)
     
     # Stats
     stats = QuasiNewtonStats{R}(history)
@@ -91,9 +91,7 @@ function minimize!(opt::Opt, x::S, obj::Objective;
         end
 
         # Check other exit conditions
-        time = elapsed(tic)
-
-        if time >= max_time
+        if overtime(timer)
             stats.status = "Time limit exceeded"
             break
         elseif iterations == max_iter
@@ -102,8 +100,7 @@ function minimize!(opt::Opt, x::S, obj::Objective;
         end
 
         # Optimizer step
-        if !step!(opt, opt.solver, x, obj, stats; max_time=max_time-time)
-            stats.status = "Linesearch failure"
+        if !step!(opt, opt.solver, x, obj, stats; timer=timer)
             break
         end
 
@@ -121,7 +118,7 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     # Update stats
     stats.converged = converged
     stats.iterations = iterations
-    stats.runtime = elapsed(tic)
+    stats.runtime = elapsed(timer)
     stats.f_evals += iterations + 1
     stats.g_evals += iterations + 1
     stats.hvp_evals = obj.H.nprod

@@ -147,7 +147,7 @@ Compute a single ARC step using `ARCSolver`.
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization statistics
 - `tol::Real`: Step tolerance (optional)
-- `max_time::Real`: Maximum allowed time (optional)
+- `timer::Runtimer`: Timer struct (optional)
 
 # Updates
 - `x` updated iterate
@@ -158,7 +158,7 @@ function step!(opt::ARCOptimizer,
                 x::S,
                 obj::Objective,
                 stats::QuasiNewtonStats;
-                max_time=Inf
+                timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Tolerance
@@ -179,7 +179,7 @@ function step!(opt::ARCOptimizer,
     end
 
     # Solve subproblem
-    krylov_solve!(solver.workspace, obj.H, -obj.g, solver.shifts, itmax=solver.krylov_order, timemax=max_time, check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=true)
+    krylov_solve!(solver.workspace, obj.H, -obj.g, solver.shifts, itmax=solver.krylov_order, timemax=remaining(timer), check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=true)
 
     update_k!(stats, iteration_count(solver.workspace))
 
@@ -197,6 +197,7 @@ function step!(opt::ARCOptimizer,
     i = findfirst(solver.workspace.converged)
 
     if i === nothing
+        stats.status = "No systems converged"
         return status
     end
 
