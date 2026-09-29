@@ -290,7 +290,7 @@ function LFASolver(dim::Int;
                     adapt::Bool=true,
                     max_depth::Int=dim,
                     min_depth::Int=2,
-                    inc_depth::R=1.5,
+                    inc_depth::R=2.0,
                     dec_depth::R=0.5,
                     eigenstep::Bool=true
     ) where {R<:AbstractFloat}
