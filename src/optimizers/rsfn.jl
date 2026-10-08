@@ -69,7 +69,7 @@ function RSFNOptimizer(dim::Int;
                         atol::R2=1e-5, rtol::R2=1e-6,
                         kwargs...
     ) where {Solver, R1<:Real, F, R2<:AbstractFloat}
-    
+
     # Hessian Lipschitz constant
     @assert isnan(M) || 0 ≤ M
     @assert 1 ≤ M₊ && 0 < M₋ ≤ 1
@@ -197,7 +197,7 @@ function step!(opt::RSFNOptimizer,
 
     μ, i = findmin(E.values)
 
-    # 
+    #
     vi = @view E.vectors[:,i]
 
     #
@@ -213,7 +213,7 @@ function step!(opt::RSFNOptimizer,
         @. solver.cache /= sqrt(E.values^2 + λ)
         mul!(solver.p, E.vectors, solver.cache)
 
-        # 
+        #
         if solver.eigenstep && M > 0 && μ < 0 && 36*λ ≤ μ^2
             sgn = α ≥ 0 ? one(R) : -one(R)
             axpy!(sgn*2*abs(μ)/M, vi, solver.p)
@@ -390,7 +390,7 @@ function step!(opt::RSFNOptimizer,
         # @. cache1 = v1 / E.values
         @views z = dot(E.vectors[solver.depth,:], cache1)
         r_norm = abs(obj.g_norm*βₖ₊₁*z)
-        
+
         # Tolerance
         if isnan(tol)
             ζ = 0.5
@@ -401,7 +401,7 @@ function step!(opt::RSFNOptimizer,
 
             tol = atol + obj.g_norm*rtol
         end
-        
+
         # Depth change
         if solver.min_depth != solver.max_depth
             if r_norm ≥ tol
@@ -415,7 +415,7 @@ function step!(opt::RSFNOptimizer,
         @. x += η*solver.p
 
         update_r!(stats, r_norm)
-    end   
+    end
 
     return status
 end
@@ -522,7 +522,7 @@ function step!(opt::RSFNOptimizer,
     @. cache1 = v1 / sqrt(E.values^2 + λ)
     mul!(cache2, E.vectors, cache1)
     @views mul!(solver.p, Q, cache2, -B1[1,1], zero(R))
-    
+
     # Linesearch
     η, M, status = opt.linesearch!(opt, x, solver.p, obj, stats)
 
@@ -550,7 +550,7 @@ function fixed_step!(opt::RSFNOptimizer,
 
     M = opt.M
     p, _ = p!(M)
-    
+
     return opt.η, M, true
 end
 
@@ -601,7 +601,7 @@ function linesearch!(opt::RSFNOptimizer,
             stats.status = "Linesearch failure"
             break
         end
-        
+
         # Check descent
         stats.f_evals += 1
 
@@ -627,7 +627,7 @@ function linesearch!(opt::RSFNOptimizer,
 
         # Increase regularization
         if η < opt.η_min
-            if M < 1e16
+            if M < 1e32
                 M *= opt.M₊
                 p, dec = p!(M)
                 p_norm = twonorm(p)
@@ -664,7 +664,7 @@ function backtrack_armijo(opt::RSFNOptimizer,
                             stats::QuasiNewtonStats;
                             timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}, F}
-    
+
     # Setup
     status = false
     f0 = obj.fval
