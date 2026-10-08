@@ -49,22 +49,22 @@ Constructor for `NewtonOptimizer`.
 """
 function NewtonOptimizer(dim::Int;
                             posdef::Bool=false,
-                            M::R1=0.,
+                            M::R1=0,
+                            η::R2=1.0, η₋::R2=0.5,
                             linesearch::F=backtrack_armijo,
-                            η::R2=1.0,
-                            η₋::R2=1/sqrt(2),
-                            atol::R2=1e-5,
-                            rtol::R2=1e-6,
+                            atol::R2=1e-5, rtol::R2=1e-6,
                             kwargs...
     ) where {R1<:Real, F, R2<:AbstractFloat}
 
     # Hessian Lipschitz constant
-    @assert isnan(M) || 0≤M
+    @assert isnan(M) || 0 ≤ M
 
     # Linesearch parameters
     if isnothing(linesearch)
         @assert 0 < η ≤ 1
-        linesearch = (args...) -> return η
+        linesearch = fixed_step!
+    else
+        @assert 0 < η₋ < 1
     end
 
     # Solver
@@ -96,8 +96,9 @@ Perform setup operations before beginning optimization process.
 
     # Estimate regularization
     if isnan(opt.M)
-        M_est = estimate_M(x, obj, stats; samples=ceil(Int, log2(length(x))))
-        opt.M = clamp(M_est, R(1e-8), R(1e8)/obj.g_norm)
+        samples = 1 #ceil(Int, log2(length(x)))
+        M_est = estimate_M(x, obj, stats; samples=samples)
+        opt.M = clamp(M_est, R(1e-12), R(1e16))
     end
 
     return nothing
@@ -114,7 +115,7 @@ Compute regularization parameter for Newton optimizer.
 - `λ::Real`: Regularization parameter
 """
 @inline function regularizer(opt::NewtonOptimizer, M::R, g_norm::R) where {R<:AbstractFloat}
-    return iszero(M) ? zero(R) : clamp(sqrt(M*g_norm), eps(R), R(1e16))
+    return iszero(M) ? zero(R) : clamp(sqrt(M*g_norm), eps(R), R(1e32))
 end
 
 #########################################################
@@ -148,7 +149,7 @@ end
 
 @inline function newton_solver(dim::Int, type::Type{<:AbstractVector{<:AbstractFloat}}, krylov_order::Int, ::Val{false})
     workspace = SymmlqWorkspace(dim, dim, type)
-    
+
     return NewtonSolver(workspace, false, krylov_order)
 end
 
@@ -195,16 +196,19 @@ function step!(opt::NewtonOptimizer,
                 stats::QuasiNewtonStats;
                 timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    
+
     # Regularization
     λ = regularizer(opt, opt.M, obj.g_norm)
 
     # Tolerance
-    ζ = 0.5
-    ξ = R(0.01)
-
-    atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
-    rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
+#     ζ = 0.5
+#     ξ = R(0.01)
+#
+#     atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
+#     rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
+#
+    atol = NaN
+    rtol = NaN
 
     # Solve
     if solver.posdef
@@ -216,7 +220,7 @@ function step!(opt::NewtonOptimizer,
     end
 
     # Linesearch
-    status, η, M = opt.linesearch!(opt, p, x, obj, stats)
+    η, M, status = opt.linesearch!(opt, p, x, obj, stats)
 
     # Stats
     update_M!(stats, M)
@@ -225,7 +229,7 @@ function step!(opt::NewtonOptimizer,
 
     # Update
     if status
-        @. x .+= η*p
+        @. x += η*p
     end
 
     return status
@@ -234,6 +238,18 @@ end
 #########################################################
 # Linesearch
 #########################################################
+
+"""
+"""
+function fixed_step!(opt::NewtonOptimizer,
+                        p::S,
+                        x::S,
+                        obj::Objective,
+                        stats::QuasiNewtonStats
+    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
+
+    return opt.η, opt.M, true
+end
 
 """
 Perform a backtracking Armijo line search.
@@ -258,7 +274,7 @@ function backtrack_armijo(opt::NewtonOptimizer,
                             obj::Objective,
                             stats::QuasiNewtonStats
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
-    
+
     # Setup
     status = false
     f0  = obj.fval
@@ -295,5 +311,5 @@ function backtrack_armijo(opt::NewtonOptimizer,
         end
     end
 
-    return status, η, M
+    return η, M, status
 end

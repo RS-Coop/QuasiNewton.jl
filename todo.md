@@ -8,6 +8,7 @@
 - Probably should be passing `M=missing` when we want autoestimation or something other than `M=NaN`
     - Same thing with how we pass `tol` in some places
 - Another linesearch for regularized Newton in the convex case
+- Correct tolerance for Newton?
 
 # Method Additions
 - Randomized coordinate projection (ARC and/or R-SFN)

@@ -227,7 +227,7 @@ function block_lanczos_fa(Z::M1, Ω::M2, k::Int;
     AB = [zeros(R, b, b) for _ in 1:k]   # diagonal blocks A_i
     BB = [zeros(R, b, b) for _ in 1:k]   # off-diagonal blocks B_{i+1}
 
-    if reorthogonalization
+    if reorthogonalize
         ABtmp = zeros(R, b, b)
     end
 
@@ -262,7 +262,7 @@ function block_lanczos_fa(Z::M1, Ω::M2, k::Int;
         W .-= V_i * AB[i]
 
         # optional reorthogonalization
-        if reorthogonalization
+        if reorthogonalize
             if i > 1
                 mul!(ABtmp, V_prev', W)
                 W .-= V_prev * ABtmp
