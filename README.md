@@ -7,9 +7,9 @@ A collection of quasi-Newton optimization algorithms.
 **DISCLAIMER**: This package is still very much a work in progress and certainly not everything has been tested thoroughly. For example, the AD functionality has only been tested (in a limited capacity) with the Enzyme.jl backend.
 
 ## License & Citation
-All source code is made available under an MIT license. You can freely use and modify the code, without warranty, so long as you provide attribution to the authors. See `LICENSE` for the full text.
+All source code is made available under an MIT license. You can freely use and modify the code, without warranty, so long as you provide attribution to the authors. See [`LICENSE`](./LICENSE) for the full text.
 
-This repository can be cited using the GitHub action in the sidebar, or using the metadata in `CITATION.cff`. See [Publications](#publications) for a full list of publications related to R-SFN and influencing this package. Please cite these individually when relevant for your own work.
+This repository can be cited using the GitHub action in the sidebar, or using the metadata in [`CITATION`](./CITATION). See [Publications](#publications) for a full list of publications related to R-SFN and influencing this package. Please cite these individually when relevant for your own work.
 
 ## Contributing
 Feel free to open issues, ask questions, or otherwise contribute!

@@ -111,7 +111,7 @@ Perform setup operations before beginning optimization process.
 
     # Estimate regularization
     if isnan(opt.M)
-        samples = 1 #ceil(Int, log2(length(x)))
+        samples = ceil(Int, log2(length(x)))
         M_est = estimate_M(x, obj, stats; samples=samples)
         opt.M = clamp(M_est, R(1e-12), R(1e16))
     end
@@ -616,7 +616,7 @@ function linesearch!(opt::RSFNOptimizer,
                     M/η # increase regularization
                 end
 
-            opt.M = clamp(M_est, 1e-12, 1e16)
+            opt.M = clamp(M_est, 1e-12, 1e32)
 
             status = true
             break
