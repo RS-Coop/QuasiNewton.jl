@@ -1,4 +1,4 @@
-# Imporvements/Features
+# Improvements/Features
 - ADHvpOperator mul! without having to convert to Vector
 - What happens if krylov processes for Newton or RN haven't converged?
 - It would be nice to only use LinearOperator.jl, but they have no way of updating the operator in place
