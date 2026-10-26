@@ -42,10 +42,10 @@ Performs the core iteration loop to minimize a scalar function `f`.
 function minimize!(opt::Opt, x::S, obj::Objective;
                     max_iter::Int, max_time::Real, history::Bool
     ) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}}
-    
+
     # Start time
     timer = Runtimer(max_time)
-    
+
     # Stats
     stats = QuasiNewtonStats{R}(history)
     converged = false
@@ -56,10 +56,11 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     update_g!(stats, obj.g_norm)
 
     # Tolerance
-    tol = opt.atol + opt.rtol*obj.g_norm
+    g_tol = opt.atol + opt.rtol*obj.g_norm
+    H_tol = sqrt(g_tol)
 
     # Initial check
-    if obj.g_norm ≤ tol
+    if obj.g_norm ≤ g_tol && -H_tol ≤ obj.eigmin
         converged = true
         stats.converged = converged
         return stats
@@ -85,7 +86,7 @@ function minimize!(opt::Opt, x::S, obj::Objective;
         end
 
         # Check gradient norm
-        if obj.g_norm ≤ tol
+        if obj.g_norm ≤ g_tol && -H_tol ≤ obj.eigmin
             converged = true
             break
         end

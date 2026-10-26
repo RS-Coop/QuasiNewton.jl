@@ -197,6 +197,8 @@ function step!(opt::RSFNOptimizer,
 
     μ, i = findmin(E.values)
 
+    obj.eigmin = μ
+
     #
     vi = @view E.vectors[:,i]
 
@@ -352,6 +354,8 @@ function step!(opt::RSFNOptimizer,
     E = Eigen(LAPACK.stev!('V', T.dv, T.ev)...)
 
     μ, i = findmin(E.values)
+
+    obj.eigmin = μ
 
     # views
     v1 = @view E.vectors[1,:] # NOTE: This is the first entry of each eigenvector

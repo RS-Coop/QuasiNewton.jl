@@ -17,6 +17,7 @@ Objective function.
 - `fval::R`: Current function value at `x`
 - `g::S`: Gradient vector at `x`
 - `g_norm::R`: Gradient norm
+- `eigmin::R`: Estimated smallest algebraic Hessian eigenvalue
 - `f::Function`: Objective function
 - `fg!::Function`: In-place gradient function
 - `H::Hv`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`)
@@ -25,6 +26,7 @@ mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, Hv<:Hvp
     fval::R # function value
     g::S # gradient
     g_norm::R # gradient norm
+    eigmin::R # minimum Hessian eigenvalue
     const f::F1 # objective function
     const fg!::F2 # objective function + in-place gradient
     const H::Hv # hvp operator
@@ -42,7 +44,9 @@ function Objective(x::S, f::F1, fg!::F2, H::Hv) where {R<:AbstractFloat, S<:Abst
     fval = fg!(g, x)
     g_norm = twonorm(g)
 
-    return Objective(fval, g, g_norm, f, fg!, H)
+    eigmin = zero(R)
+
+    return Objective(fval, g, g_norm, eigmin, f, fg!, H)
 end
 
 """
@@ -100,7 +104,7 @@ NOTE: This could be more efficient if we could do block computations (e.g., Hess
 	for i=1:samples
 		ζ = randn(R, length(x))
 		normalize!(ζ)
-		
+
 		g2 = similar(x)
 		obj.fg!(g2, @. x + h*ζ)
 		stats.g_evals += 1
