@@ -1,13 +1,13 @@
 #=
 Author: Cooper Simpson
 
-QuasiNewton optimizer stats
+QuasiNewton optimizer stats and miscellaneous utilities.
 =#
 
 using StatsBase: mean
 
-export QuasiNewtonStats
-
+#########################################################
+# QuasiNewton optimization statistics
 #########################################################
 
 mutable struct QuasiNewtonStats{R<:Real}
@@ -28,7 +28,7 @@ mutable struct QuasiNewtonStats{R<:Real}
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
         return new{R}(history, false,
                         0, 0.0, 0, 0, 0,
-                        Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)), 
+                        Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)),
                         history ? R[] : Union{R,Missing}[missing],
                         history ? Int[] : Union{Int,Missing}[missing],
                         history ? R[] : Union{R,Missing}[missing],
@@ -68,7 +68,7 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "Runtime (s):             %9.2e\n", stats.runtime)
     @printf(io, "Minimum:                 %9.2e\n", length(stats.f_seq) != 0 ? stats.f_seq[end] : missing)
     @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? stats.g_seq[end] : missing)
-    
+
     println()
 
     @printf(io, "Evaluations:\n")
@@ -98,8 +98,9 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "##################################\n")
 end
 
-#########################################################
-
+"""
+Printing utilities.
+"""
 const LABEL_WIDTH = 18
 const VALUE_WIDTH = 16
 
@@ -115,9 +116,11 @@ function printstat(io, label, x)
 end
 
 #########################################################
+# Misc utilities
+#########################################################
 
 """
-Timer
+Timer.
 """
 struct Runtimer
     start::UInt64
@@ -131,8 +134,6 @@ Runtimer(limit::Real=Inf) = Runtimer(time_ns(), Float64(limit))
 @inline remaining(t::Runtimer) = max(0.0, t.limit - elapsed(t))
 
 @inline overtime(t::Runtimer) = elapsed(t) ≥ t.limit
-
-#########################################################
 
 """
 Fast 2-norm with type conversion.

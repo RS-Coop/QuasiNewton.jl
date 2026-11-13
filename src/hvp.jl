@@ -1,13 +1,12 @@
 #=
 Author: Cooper Simpson
 
-Associated functionality for matrix free Hessian vector multiplication operator
-using mixed mode AD.
+Associated functionality for matrix free Hessian vector multiplication operator using:
+    - LinearOperators.jl
+    - Mixed mode AD with DifferentiationInterface.jl
 =#
 
-import Base: *
-
-export LHvpOperator, ADHvpOperator
+export ADHvpOperator, LHvpOperator
 
 #########################################################
 # Abstract operator
@@ -60,7 +59,7 @@ end
 
 		col = view(H_mat,:,i)
 		mul!(col, H, ei)
-		
+
 		ei[i] = zero(R)
 	end
 
@@ -77,7 +76,7 @@ Out-of-place matrix-vector multiplication with Hessian-vector product operator.
 # Returns
 - `y::Vector{R}`: Result of `H*v`
 """
-@inline function *(H::HvpOperator{R}, v::AbstractVector{R}) where {R}
+@inline function Base.:*(H::HvpOperator{R}, v::AbstractVector{R}) where {R}
 	y = similar(v)
 	mul!(y, H, v)
 	return y
@@ -93,7 +92,7 @@ Out-of-place matrix-matrix multiplication with Hessian-vector product operator.
 # Returns
 - `Y::Matrix{R}`: Result of `H*V`
 """
-@inline function *(H::HvpOperator{R}, V::AbstractMatrix{R}) where {R}
+@inline function Base.:*(H::HvpOperator{R}, V::AbstractMatrix{R}) where {R}
 	Y = similar(V)
 	mul!(Y, H, V)
 	return Y
