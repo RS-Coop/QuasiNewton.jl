@@ -129,8 +129,8 @@ Compute regularization parameter for R-SFN.
 # Returns
 - `λ::Real`: Regularization parameter
 """
-@inline function regularizer(opt::RSFNOptimizer, M::R, g_norm::R) where {R<:AbstractFloat}
-    return iszero(M) ? zero(R) : clamp(M*g_norm, eps(R), R(1e32))
+@inline function regularizer(opt::RSFNOptimizer, M::Real, g_norm::R) where {R}
+    return iszero(M) ? zero(R) : clamp(R(M)*g_norm, eps(R), R(1e32))
 end
 
 #########################################################

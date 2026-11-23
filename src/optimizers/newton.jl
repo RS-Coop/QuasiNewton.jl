@@ -114,8 +114,8 @@ Compute regularization parameter for Newton optimizer.
 # Returns
 - `λ::Real`: Regularization parameter
 """
-@inline function regularizer(opt::NewtonOptimizer, M::R, g_norm::R) where {R<:AbstractFloat}
-    return iszero(M) ? zero(R) : clamp(sqrt(M*g_norm), eps(R), R(1e32))
+@inline function regularizer(opt::NewtonOptimizer, M::Real, g_norm::R) where {R}
+    return iszero(M) ? zero(R) : clamp(sqrt(R(M)*g_norm), eps(R), R(1e32))
 end
 
 #########################################################
