@@ -1,7 +1,9 @@
 # Improvements/Features
 - ADHvpOperator mul! without having to convert to Vector
 - What happens if krylov processes for Newton or RN haven't converged?
-- It would be nice to only use LinearOperator.jl, but they have no way of updating the operator in place
+- It would be nice to use a unified operator for the Hessian
+    - SciMLOperators.jl, but how best to do AD?
+    - LinearOperator.jl, but they have no way of updating the operator in place
 - Krylov subspace recycling
 - Should we be reorthogonalizing in Lanczos?
 - Do we need the tolerance we are asking for in LFA?
@@ -9,7 +11,11 @@
     - Same thing with how we pass `tol` in some places
 - Another linesearch for regularized Newton in the convex case
 - Correct tolerance for Newton?
+- Extension for other modeling packages
+    - SciML Optimization.jl
+    - JuliaSmoothOptimizers NLPModels.jl)
 
 # Method Additions
 - Randomized coordinate projection (ARC and/or R-SFN)
 - SketchySGD (how is their stepsize theoretically motivated)
+- LBFGS
