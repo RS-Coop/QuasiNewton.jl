@@ -22,15 +22,20 @@ Objective function.
 - `fg!::Function`: In-place gradient function
 - `H::Hv`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`)
 """
-mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, Hv<:HvpOperator}
+mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, O<:HvpOperator}
     fval::R # function value
     g::S # gradient
     g_norm::R # gradient norm
     eigmin::R # minimum Hessian eigenvalue
     const f::F1 # objective function
     const fg!::F2 # objective function + in-place gradient
-    const H::Hv # hvp operator
+    const H::O # Hessian operator
+    f_evals::Int # function evaluations
+    g_evals::Int # gradient evaluations
+    H_evals::Int # Hessian evaluations
 end
+
+dim(obj::Objective) = length(obj.g)
 
 """
 # Arguments
@@ -46,7 +51,7 @@ function Objective(x::S, f::F1, fg!::F2, H::Hv) where {R<:AbstractFloat, S<:Abst
 
     eigmin = zero(R)
 
-    return Objective(fval, g, g_norm, eigmin, f, fg!, H)
+    return Objective(fval, g, g_norm, eigmin, f, fg!, H, 0, 0, 0)
 end
 
 """
@@ -59,7 +64,7 @@ end
 function Objective(x::S, f::F1, fg!::F2, Hf::F3) where {R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, F3}
     H = LHvpOperator(Hf, x)
 
-    return Objective(x, f, fg!, H)
+    return Objective(x, f, fg!, H, 0, 0, 0)
 end
 
 """
@@ -74,7 +79,7 @@ function Objective(x::S, f::F, ad_backend::AD) where {R<:AbstractFloat, S<:Abstr
 
     H = ADHvpOperator(f, x, ad_backend)
 
-    return Objective(x, f, fg!, H)
+    return Objective(x, f, fg!, H, 0, 0, 0)
 end
 
 """
@@ -83,7 +88,7 @@ end
 - `obj::Objective`: Objective function
 """
 function Objective(x::S, obj::Objective) where {S<:AbstractVector{<:AbstractFloat}}
-    length(x) == length(obj.g) || throw(DimensionMismatch("x has length $(length(x)), objective expects $(length(obj.g))"))
+    length(x) == dim(obj) || throw(DimensionMismatch("x has length $(length(x)), objective expects $(dim(obj))"))
     return reset!(obj, x)
 end
 
@@ -111,32 +116,33 @@ end
 # Hessian Lipschitz estimation
 #########################################################
 
-function estimate_M(x::AbstractVector{R}, obj::Objective, stats::QuasiNewtonStats; samples::Int=1) where {R<:AbstractFloat}
+function estimate_M(x::AbstractVector{R}, obj::Objective; samples::Int=1) where {R<:AbstractFloat}
     h = eps(R)^(1/3)*max(one(R), norm(x))
     ζ, xp, g2, y = similar(x), similar(x), similar(x), similar(x)
 
     M_est = zero(R)
     for _ in 1:samples
         normalize!(randn!(ζ))
-        M_est += _estimate_M!(ζ, xp, g2, y, x, obj, h, stats)
+        M_est += _estimate_M!(ζ, xp, g2, y, x, obj, h)
     end
     M_est /= samples
 
     return isfinite(M_est) ? M_est : one(R)
 end
 
-function estimate_M!(ζ::AbstractVector{R}, x::AbstractVector{R}, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat}
+function estimate_M!(ζ::AbstractVector{R}, x::AbstractVector{R}, obj::Objective) where {R<:AbstractFloat}
     h = eps(R)^(1/3)*max(one(R), norm(x))
     normalize!(ζ)
-    M_est = _estimate_M!(ζ, similar(x), similar(x), similar(x), x, obj, h, stats)
+    M_est = _estimate_M!(ζ, similar(x), similar(x), similar(x), x, obj, h)
 
     return isfinite(M_est) ? M_est : one(R)
 end
 
-function _estimate_M!(ζ::AbstractVector{R}, xp::AbstractVector{R}, g2::AbstractVector{R}, y::AbstractVector{R}, x::AbstractVector{R}, obj::Objective, h::R, stats) where {R<:AbstractFloat}
+function _estimate_M!(ζ::AbstractVector{R}, xp::AbstractVector{R}, g2::AbstractVector{R}, y::AbstractVector{R},
+                        x::AbstractVector{R}, obj::Objective, h::R) where {R<:AbstractFloat}
     @. xp = x + h*ζ
     obj.fg!(g2, xp)
-    stats.g_evals += 1
+    obj.g_evals += 1
     mul!(y, obj.H, ζ)
     @. g2 = g2 - obj.g - h*y
 

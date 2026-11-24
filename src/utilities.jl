@@ -13,14 +13,14 @@ mutable struct QuasiNewtonStats{R<:Real}
     converged::Bool # whether optimizer has converged
     iterations::Int # number of optimizer iterations
     runtime::Float64 # iteration runtime
-    f_evals::Int # number of function evaluations
-    g_evals::Int # number of gradient evaluations
-    hvp_evals::Int # number of hvp evaluations
-    f_seq::Vector{R} # function value sequence
-    g_seq::Vector{R} # gradient norm sequence
-    M_seq::Vector{Union{R,Missing}} # regularization tracking
-    k_seq::Vector{Union{Int,Missing}} # number of Krylov iterations
-    r_seq::Vector{Union{R,Missing}} # residual norm sequence
+    function_evals::Int # number of function evaluations
+    gradient_evals::Int # number of gradient evaluations
+    hessian_evals::Int # number of hessian evaluations
+    function_values::Vector{R} # function value sequence
+    gradient_norms::Vector{R} # gradient norm sequence
+    regularization_values::Vector{Union{R,Missing}} # regularization tracking
+    krylov_iterations::Vector{Union{Int,Missing}} # number of Krylov iterations
+    residual_norms::Vector{Union{R,Missing}} # residual norm sequence
     status::String # exit status
 
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
@@ -35,27 +35,27 @@ mutable struct QuasiNewtonStats{R<:Real}
 end
 
 function update_f!(stats::QuasiNewtonStats, val::R) where {R}
-    stats.history ? push!(stats.f_seq, val) : stats.f_seq[1] = val
+    stats.history ? push!(stats.function_values, val) : stats.function_values[1] = val
     return nothing
 end
 
 function update_g!(stats::QuasiNewtonStats, val::R) where {R}
-    stats.history ? push!(stats.g_seq, val) : stats.g_seq[1] = val
+    stats.history ? push!(stats.gradient_norms, val) : stats.gradient_norms[1] = val
     return nothing
 end
 
 function update_M!(stats::QuasiNewtonStats, val::R) where {R}
-    stats.history ? push!(stats.M_seq, val) : nothing
+    stats.history ? push!(stats.regularization_values, val) : nothing
     return nothing
 end
 
 function update_k!(stats::QuasiNewtonStats, val::Int)
-    stats.history ? push!(stats.k_seq, val) : nothing
+    stats.history ? push!(stats.krylov_iterations, val) : nothing
     return nothing
 end
 
 function update_r!(stats::QuasiNewtonStats, val::R) where {R}
-    stats.history ? push!(stats.r_seq, val) : nothing
+    stats.history ? push!(stats.residual_norms, val) : nothing
     return nothing
 end
 
@@ -64,34 +64,34 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "Converged:               %9s\n", stats.converged)
     @printf(io, "Iterations:              %9d\n", stats.iterations)
     @printf(io, "Runtime (s):             %9.2e\n", stats.runtime)
-    @printf(io, "Minimum:                 %9.2e\n", length(stats.f_seq) != 0 ? stats.f_seq[end] : missing)
-    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? stats.g_seq[end] : missing)
+    @printf(io, "Minimum:                 %9.2e\n", length(stats.function_values) != 0 ? stats.function_values[end] : missing)
+    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.gradient_norms) != 0 ? stats.gradient_norms[end] : missing)
 
     println(io)
 
     @printf(io, "Evaluations:\n")
-    @printf(io, "      Total:             %9d\n", stats.f_evals+stats.g_evals+stats.hvp_evals)
-    @printf(io, "   Function:             %9d\n", stats.f_evals)
-    @printf(io, "   Gradient:             %9d\n", stats.g_evals)
-    @printf(io, "    Hessian:             %9d\n", stats.hvp_evals)
+    @printf(io, "      Total:             %9d\n", stats.function_evals + stats.gradient_evals + stats.hessian_evals)
+    @printf(io, "   Function:             %9d\n", stats.function_evals)
+    @printf(io, "   Gradient:             %9d\n", stats.gradient_evals)
+    @printf(io, "    Hessian:             %9d\n", stats.hessian_evals)
 
     println(io)
 
     @printf(io, "Est. Hessian Lipschitz Constant:\n")
-    printstat(io, "           Max:", maximum_or_missing(stats.M_seq))
-    printstat(io, "           Avg:", mean_or_missing(stats.M_seq))
+    printstat(io, "           Max:", maximum_or_missing(stats.regularization_values))
+    printstat(io, "           Avg:", mean_or_missing(stats.regularization_values))
 
     println(io)
 
     @printf(io, "Krylov Iterations:\n")
-    printstat(io, "              Max:", maximum_or_missing(stats.k_seq))
-    printstat(io, "              Avg:", mean_or_missing(stats.k_seq))
+    printstat(io, "              Max:", maximum_or_missing(stats.krylov_iterations))
+    printstat(io, "              Avg:", mean_or_missing(stats.krylov_iterations))
 
     println(io)
 
     @printf(io, "Residual Norm:\n")
-    printstat(io, "          Max:", maximum_or_missing(stats.r_seq))
-    printstat(io, "          Avg:", mean_or_missing(stats.r_seq))
+    printstat(io, "          Max:", maximum_or_missing(stats.residual_norms))
+    printstat(io, "          Avg:", mean_or_missing(stats.residual_norms))
 
     println(io)
 
