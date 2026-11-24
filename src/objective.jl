@@ -78,6 +78,16 @@ function Objective(x::S, f::F, ad_backend::AD) where {R<:AbstractFloat, S<:Abstr
 end
 
 """
+# Arguments
+- `x::AbstractVector`: Initial guess for the solution
+- `obj::Objective`: Objective function
+"""
+function Objective(x::S, obj::Objective) where {S<:AbstractVector{<:AbstractFloat}}
+    length(x) == length(obj.g) || throw(DimensionMismatch("x has length $(length(x)), objective expects $(length(obj.g))"))
+    return reset!(obj, x)
+end
+
+"""
 """
 function update!(obj::Objective, x::S) where {S<:AbstractVector{<:AbstractFloat}}
     obj.fval = obj.fg!(obj.g, x)
@@ -87,56 +97,48 @@ function update!(obj::Objective, x::S) where {S<:AbstractVector{<:AbstractFloat}
     return obj
 end
 
+"""
+"""
+function reset!(obj::Objective, x::S) where {S<:AbstractVector{<:AbstractFloat}}
+    obj.fval = obj.fg!(obj.g, x)
+    obj.g_norm = twonorm(obj.g)
+    obj.eigmin = zero(obj.eigmin)
+
+    return obj
+end
+
 #########################################################
 # Hessian Lipschitz estimation
 #########################################################
 
-"""
-Hessian Lipschitz estimate.
-
-NOTE: This could be more efficient if we could do block computations (e.g., Hessian-Matrix products)
-"""
-@inline function estimate_M(x::S, obj::Objective, stats::QuasiNewtonStats; samples::Int=1) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function estimate_M(x::AbstractVector{R}, obj::Objective, stats::QuasiNewtonStats; samples::Int=1) where {R<:AbstractFloat}
     h = eps(R)^(1/3)*max(one(R), norm(x))
+    ζ, xp, g2, y = similar(x), similar(x), similar(x), similar(x)
 
-	M_est = zero(R)
+    M_est = zero(R)
+    for _ in 1:samples
+        normalize!(randn!(ζ))
+        M_est += _estimate_M!(ζ, xp, g2, y, x, obj, h, stats)
+    end
+    M_est /= samples
 
-	for i=1:samples
-		ζ = randn(R, length(x))
-		normalize!(ζ)
-
-		g2 = similar(x)
-		obj.fg!(g2, @. x + h*ζ)
-		stats.g_evals += 1
-
-		y = similar(ζ)
-		mul!(y, obj.H, ζ)
-
-		@. g2 = g2 - obj.g - h*y
-
-		M_est += twonorm(g2)/h^2
-	end
-
-	M_est /= samples
-
-    return isnan(M_est) ? one(R) : 2*M_est
+    return isfinite(M_est) ? M_est : one(R)
 end
 
-@inline function estimate_M(x::S, obj::Objective, ζ::S, stats::QuasiNewtonStats) where {R<:AbstractFloat, S<:AbstractVector{R}}
+function estimate_M!(ζ::AbstractVector{R}, x::AbstractVector{R}, obj::Objective, stats::QuasiNewtonStats) where {R<:AbstractFloat}
     h = eps(R)^(1/3)*max(one(R), norm(x))
-
     normalize!(ζ)
+    M_est = _estimate_M!(ζ, similar(x), similar(x), similar(x), x, obj, h, stats)
 
-    g2 = similar(x)
-    obj.fg!(g2, @. x + h*ζ)
+    return isfinite(M_est) ? M_est : one(R)
+end
+
+function _estimate_M!(ζ::AbstractVector{R}, xp::AbstractVector{R}, g2::AbstractVector{R}, y::AbstractVector{R}, x::AbstractVector{R}, obj::Objective, h::R, stats) where {R<:AbstractFloat}
+    @. xp = x + h*ζ
+    obj.fg!(g2, xp)
     stats.g_evals += 1
-
-	y = similar(ζ)
     mul!(y, obj.H, ζ)
-
     @. g2 = g2 - obj.g - h*y
 
-    M_est = twonorm(g2)/h^2
-
-	return isnan(M_est) ? one(R) : 2*M_est
+    return 2*twonorm(g2)/h^2
 end

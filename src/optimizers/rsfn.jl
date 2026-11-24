@@ -18,7 +18,7 @@ const ρ_LOCAL = -1/4
 Regularized Saddle-Free Newton (R-SFN) optimizer.
 
 # Fields
-- `solver::QuasiNewtonSolver`: Solver for computing the search direction
+- `solver::AbstractQuasiNewtonSolver`: Solver for computing the search direction
 - `M::AbstractFloat`: local Hessian Lipschitz constant
 - `linesearch!::Function`: Linesearch function
 - `η::AbstractFloat`: Stepsize
@@ -28,7 +28,7 @@ Regularized Saddle-Free Newton (R-SFN) optimizer.
 - `atol::AbstractFloat`: Absolute gradient tolerance
 - `rtol::AbstractFloat`: Relative gradient tolerance
 """
-mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: QuasiNewtonOptimizer
+mutable struct RSFN{Q<:AbstractQuasiNewtonSolver, R<:AbstractFloat, F} <: AbstractQuasiNewtonOptimizer
     const solver::Q # search direction solver
     M::R # local Hessian Lipschitz constant
     const M₊::R # M increase factor
@@ -42,7 +42,7 @@ mutable struct RSFNOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: Quasi
 end
 
 """
-Constructor for `RSFNOptimizer`.
+Constructor for `RSFN`.
 
 # Arguments
 - `dim::Int`: Problem dimension
@@ -59,9 +59,9 @@ Constructor for `RSFNOptimizer`.
 - `kwargs`: Keyword arguments passed to solver constructor
 
 # Returns
-- `RSFNOptimizer` instance
+- `RSFN` instance
 """
-function RSFNOptimizer(dim::Int;
+function RSFN(dim::Int;
                         solver::Solver=LFASolver,
                         M::R1=NaN, M₊::R2=1e1, M₋::R2=0.25,
                         η::R2=1.0, η₋::R2=0.5, η_min::R2=2^-5,
@@ -85,14 +85,14 @@ function RSFNOptimizer(dim::Int;
     # Solver
     solver_ = solver(dim; kwargs...)
 
-    return RSFNOptimizer(solver_, R2(M), M₊, M₋, η, η₋, η_min, linesearch, atol, rtol)
+    return RSFN(solver_, R2(M), M₊, M₋, η, η₋, η_min, linesearch, atol, rtol)
 end
 
 """
 Perform setup operations before beginning optimization process.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer instance.
+- `opt::RSFN`: Optimizer instance.
 - `x::S`: Current iterate.
 - `obj::Objective`: Objective function instance.
 - `stats::QuasiNewtonStats`: Optimization Statistics
@@ -103,7 +103,7 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::RSFNOptimizer,
+@inline function setup!(opt::RSFN,
                         x::S,
                         obj::Objective,
                         stats::QuasiNewtonStats
@@ -123,13 +123,13 @@ end
 Compute regularization parameter for R-SFN.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer
+- `opt::RSFN`: Optimizer
 - `g_norm::Real`: Gradient norm
 
 # Returns
 - `λ::Real`: Regularization parameter
 """
-@inline function regularizer(opt::RSFNOptimizer, M::Real, g_norm::R) where {R}
+@inline function regularizer(opt::RSFN, M::Real, g_norm::R) where {R}
     return iszero(M) ? zero(R) : clamp(R(M)*g_norm, eps(R), R(1e32))
 end
 
@@ -144,7 +144,7 @@ Full eigendecomposition R-SFN search direction solver.
 - `p::Vector`: Search direction
 - `cache::Vector`: Temporary memory
 """
-struct EigenSolver{S<:AbstractVector{<:AbstractFloat}, M<:AbstractMatrix{<:AbstractFloat}}  <: QuasiNewtonSolver
+struct EigenSolver{S<:AbstractVector{<:AbstractFloat}, M<:AbstractMatrix{<:AbstractFloat}}  <: AbstractQuasiNewtonSolver
     eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
     cache1::S # temporary memory
@@ -174,7 +174,7 @@ end
 Compute a single R-SFN step using `EigenSolver`.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer
+- `opt::RSFN`: Optimizer
 - `solver::EigenSolver`: Solver instance
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
@@ -185,7 +185,7 @@ Compute a single R-SFN step using `EigenSolver`.
 - `x` updated iterate
 - `stats` with iteration info
 """
-function step!(opt::RSFNOptimizer,
+function step!(opt::RSFN,
                 solver::EigenSolver,
                 x::S,
                 obj::Objective,
@@ -255,7 +255,7 @@ Lanczos-based R-SFN search direction solver.
 - `eigenstep::Bool`: Whether to add eigenstep
 - `p::Vector`: Search direction
 """
-mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: QuasiNewtonSolver
+mutable struct LFASolver{R<:AbstractFloat, S<:AbstractVector{R}}  <: AbstractQuasiNewtonSolver
     depth::Int # krylov depth
     const min_depth::Int # minimum krylov depth
     const max_depth::Int # maximum krylov depth
@@ -317,7 +317,7 @@ end
 Compute a single R-SFN step using `LFASolver`.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer
+- `opt::RSFN`: Optimizer
 - `solver::LFASolver`: Solver instance
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
@@ -329,7 +329,7 @@ Compute a single R-SFN step using `LFASolver`.
 - `x` updated iterate
 - `stats` with iteration info
 """
-function step!(opt::RSFNOptimizer,
+function step!(opt::RSFN,
                 solver::LFASolver,
                 x::S,
                 obj::Objective,
@@ -436,7 +436,7 @@ Block Lanczos R-SFN search direction solver.
 - `Ω::Matrix`: Block right-hand side
 - `p::Vector`: Search direction
 """
-mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}  <: QuasiNewtonSolver
+mutable struct BlockLFASolver{R<:AbstractFloat, S<:AbstractVector{R}, M<:AbstractMatrix{R}}  <: AbstractQuasiNewtonSolver
     depth::Int # krylov depth
     const block_size::Int # krylov block size
     const Ω::M # block RHS
@@ -474,7 +474,7 @@ end
 Compute a single R-SFN step using `BlockLFASolver`.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer
+- `opt::RSFN`: Optimizer
 - `solver::BlockLFASolver`: Solver instance
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
@@ -486,7 +486,7 @@ Compute a single R-SFN step using `BlockLFASolver`.
 - `x` updated iterate
 - `stats` with iteration info
 """
-function step!(opt::RSFNOptimizer,
+function step!(opt::RSFN,
                 solver::BlockLFASolver,
                 x::S,
                 obj::Objective,
@@ -543,7 +543,7 @@ end
 
 """
 """
-function fixed_step!(opt::RSFNOptimizer,
+function fixed_step!(opt::RSFN,
                         x::S,
                         p!::F,
                         obj::Objective,
@@ -561,7 +561,7 @@ end
 Perform in-place linesearch on stepsize and/or regularization.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer instance
+- `opt::RSFN`: Optimizer instance
 - `x::S`: Current iterate
 - `p!::F`: Search function
 - `obj:Objective`: Objective function instance
@@ -575,7 +575,7 @@ Perform in-place linesearch on stepsize and/or regularization.
 - `η::Float`: Accepted stepsize
 - `M::Float`: Accepted regularization
 """
-function linesearch!(opt::RSFNOptimizer,
+function linesearch!(opt::RSFN,
                         x::S,
                         p!::F,
                         obj::Objective,
@@ -649,7 +649,7 @@ end
 Perform a backtracking Armijo line search.
 
 # Arguments
-- `opt::RSFNOptimizer`: Optimizer instance
+- `opt::RSFN`: Optimizer instance
 - `x::S`: Current iterate
 - `p!::F`: Search function
 - `obj:Objective`: Objective function instance
@@ -660,7 +660,7 @@ Perform a backtracking Armijo line search.
 - `η::Float`: Accepted stepsize
 - `M::Float`: Accepted regularization
 """
-function backtrack_armijo(opt::RSFNOptimizer,
+function backtrack_armijo(opt::RSFN,
                             x::S,
                             p!::F,
                             obj::Objective,

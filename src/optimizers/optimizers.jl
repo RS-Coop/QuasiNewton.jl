@@ -4,8 +4,8 @@ Author: Cooper Simpson
 General definitions for Newton-type optimizers.
 =#
 
-abstract type QuasiNewtonOptimizer end
-abstract type QuasiNewtonSolver end
+abstract type AbstractQuasiNewtonOptimizer end
+abstract type AbstractQuasiNewtonSolver end
 
 include("arc.jl")
 include("newton.jl")

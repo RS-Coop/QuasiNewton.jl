@@ -21,7 +21,7 @@ Adaptive Regularization with Cubics (ARC) optimizer.
 - `atol::Float`: Absolute gradient norm tolerance
 - `rtol::Float`: Relative gradient norm tolerance
 """
-mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, R2<:AbstractFloat} <: QuasiNewtonOptimizer
+mutable struct ARC{Q<:AbstractQuasiNewtonSolver, R1<:Real, R2<:AbstractFloat} <: AbstractQuasiNewtonOptimizer
     const solver::Q # search direction solver
     M::R1 #
     const η1::R2 #
@@ -33,7 +33,7 @@ mutable struct ARCOptimizer{Q<:QuasiNewtonSolver, R1<:Real, R2<:AbstractFloat} <
 end
 
 """
-Constructor for `ARCOptimizer`.
+Constructor for `ARC`.
 
 # Arguments
 - `dim::Int`: Problem dimension
@@ -47,9 +47,9 @@ Constructor for `ARCOptimizer`.
 - `kwargs...`: Passed to `ARCSolver` constructor
 
 # Returns
-- `ARCOptimizer` instance
+- `ARC` instance
 """
-function ARCOptimizer(dim::Int;
+function ARC(dim::Int;
                         solver::Solver=ARCSolver,
                         M::R1=10.0,
                         η1::R2=0.1,
@@ -67,14 +67,14 @@ function ARCOptimizer(dim::Int;
 
     solver_ = solver(dim; kwargs...)
 
-    return ARCOptimizer(solver_, M, η1, η2, γ1, γ2, atol, rtol)
+    return ARC(solver_, M, η1, η2, γ1, γ2, atol, rtol)
 end
 
 """
 Perform setup operations before beginning optimization process.
 
 # Arguments
-- `opt::ARCOptimizer`: Optimizer instance
+- `opt::ARC`: Optimizer instance
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization Statistics
@@ -85,7 +85,7 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::ARCOptimizer,
+@inline function setup!(opt::ARC,
                         x::S,
                         obj::Objective,
                         stats::QuasiNewtonStats
@@ -106,7 +106,7 @@ ARC subproblem solver using shifted CG Lanczos.
 - `krylov_order::Int`: Maximum Krylov subspace size
 - `shifts::Vector`: Shift values for cubic regularization
 """
-struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: QuasiNewtonSolver
+struct ARCSolver{W<:KrylovWorkspace, S<:AbstractVector{<:AbstractFloat}} <: AbstractQuasiNewtonSolver
     workspace::W # Krylov workspace
     krylov_order::Int # maximum Krylov subspace size
     shifts::S # shifts
@@ -142,7 +142,7 @@ end
 Compute a single ARC step using `ARCSolver`.
 
 # Arguments
-- `opt::ARCOptimizer`: Optimizer
+- `opt::ARC`: Optimizer
 - `solver::ARCSolver`: Solver instance
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
@@ -154,7 +154,7 @@ Compute a single ARC step using `ARCSolver`.
 - `x` updated iterate
 - `stats` with iteration info
 """
-function step!(opt::ARCOptimizer,
+function step!(opt::ARC,
                 solver::ARCSolver,
                 x::S,
                 obj::Objective,

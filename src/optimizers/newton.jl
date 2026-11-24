@@ -12,7 +12,7 @@ Author: Cooper Simpson
 (Regularized) Newton optimizer.
 
 # Fields
-- `solver::QuasiNewtonSolver`: Solver for computing the search direction
+- `solver::AbstractQuasiNewtonSolver`: Solver for computing the search direction
 - `M::AbstractFloat`: Hessian regularization scaling
 - `linesearch!::Function`: Linesearch function
 - `η::AbstractFloat`: Stepsize
@@ -20,7 +20,7 @@ Author: Cooper Simpson
 - `atol::AbstractFloat`: Absolute gradient tolerance
 - `rtol::AbstractFloat`: Relative gradient tolerance
 """
-mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: QuasiNewtonOptimizer
+mutable struct Newton{Q<:AbstractQuasiNewtonSolver, R<:AbstractFloat, F} <: AbstractQuasiNewtonOptimizer
     const solver::Q # search direction solver
     M::R # hessian regularization scaling
     const linesearch!::F # linesearch function
@@ -31,7 +31,7 @@ mutable struct NewtonOptimizer{Q<:QuasiNewtonSolver, R<:AbstractFloat, F} <: Qua
 end
 
 """
-Constructor for `NewtonOptimizer`.
+Constructor for `Newton`.
 
 # Arguments
 - `dim::Int`: Problem dimension
@@ -45,9 +45,9 @@ Constructor for `NewtonOptimizer`.
 - `kwargs`: Keyword arguments passed to solver constructor
 
 # Returns
-- `NewtonOptimizer` instance
+- `Newton` instance
 """
-function NewtonOptimizer(dim::Int;
+function Newton(dim::Int;
                             posdef::Bool=false,
                             M::R1=0,
                             η::R2=1.0, η₋::R2=0.5,
@@ -70,14 +70,14 @@ function NewtonOptimizer(dim::Int;
     # Solver
     solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
-    return NewtonOptimizer(solver, R2(M), linesearch, η, η₋, atol, rtol)
+    return Newton(solver, R2(M), linesearch, η, η₋, atol, rtol)
 end
 
 """
 Perform setup operations before beginning optimization process.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer instance
+- `opt::Newton`: Optimizer instance
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization Statistics
@@ -88,7 +88,7 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::NewtonOptimizer,
+@inline function setup!(opt::Newton,
                         x::S,
                         obj::Objective,
                         stats::QuasiNewtonStats
@@ -108,13 +108,13 @@ end
 Compute regularization parameter for Newton optimizer.
 
 # Arguments
-- `opt::NewtonOptimizer`
+- `opt::Newton`
 - `g_norm::Real`: Gradient norm.
 
 # Returns
 - `λ::Real`: Regularization parameter
 """
-@inline function regularizer(opt::NewtonOptimizer, M::Real, g_norm::R) where {R}
+@inline function regularizer(opt::Newton, M::Real, g_norm::R) where {R}
     return iszero(M) ? zero(R) : clamp(sqrt(R(M)*g_norm), eps(R), R(1e32))
 end
 
@@ -135,7 +135,7 @@ Uses:
 - `krylov_order::Int`: Maximum Krylov subspace size
 - `p::Vector`: Search direction
 """
-struct NewtonSolver{W<:KrylovWorkspace} <: QuasiNewtonSolver
+struct NewtonSolver{W<:KrylovWorkspace} <: AbstractQuasiNewtonSolver
     workspace::W # krylov workspace
     posdef::Bool # positive definite
     krylov_order::Int # maximum Krylov subspace size
@@ -178,7 +178,7 @@ end
 Compute a single Newton step using `NewtonSolver`.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer
+- `opt::Newton`: Optimizer
 - `solver::NewtonSolver`: Solver instance
 - `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
@@ -189,7 +189,7 @@ Compute a single Newton step using `NewtonSolver`.
 - `x` updated iterate
 - `stats` with iteration info
 """
-function step!(opt::NewtonOptimizer,
+function step!(opt::Newton,
                 solver::NewtonSolver,
                 x::S,
                 obj::Objective,
@@ -241,7 +241,7 @@ end
 
 """
 """
-function fixed_step!(opt::NewtonOptimizer,
+function fixed_step!(opt::Newton,
                         p::S,
                         x::S,
                         obj::Objective,
@@ -255,7 +255,7 @@ end
 Perform a backtracking Armijo line search.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer instance
+- `opt::Newton`: Optimizer instance
 - `x::S`: Current iterate
 - `p::F`: Step function
 - `obj:Objective`: Objective function instance
@@ -268,7 +268,7 @@ Perform a backtracking Armijo line search.
 # Returns
 - `status::Bool`: Always returns `true`
 """
-function backtrack_armijo(opt::NewtonOptimizer,
+function backtrack_armijo(opt::Newton,
                             p::S,
                             x::S,
                             obj::Objective,

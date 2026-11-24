@@ -10,11 +10,21 @@ export minimize!
 # Minimization loop
 #########################################################
 
+function minimize!(::Type{O}, x::S, obj_args::Vararg{Any,N};
+						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, opt_kwargs...
+		) where {O<:AbstractQuasiNewtonOptimizer, S<:AbstractVector{<:AbstractFloat}, N}
+
+		opt = O(length(x); opt_kwargs...)
+		obj = Objective(x, obj_args...)
+
+		return minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
+	end
+
 """
 Performs the core iteration loop to minimize a scalar function `f`.
 
 # Arguments
-- `opt::QuasiNewtonOptimizer`: Configured optimizer instance
+- `opt::AbstractQuasiNewtonOptimizer`: Configured optimizer instance
 - `x::AbstractVector`: Initial guess for the solution; updated in-place
 - `obj:Objective`: Objective function instance
 - `max_iter::Int`: Maximum number of iterations
@@ -41,7 +51,7 @@ Performs the core iteration loop to minimize a scalar function `f`.
 """
 function minimize!(opt::Opt, x::S, obj::Objective;
                     max_iter::Int, max_time::Real, history::Bool
-    ) where {Opt<:QuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}}
+    ) where {Opt<:AbstractQuasiNewtonOptimizer, R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Start time
     timer = Runtimer(max_time)
