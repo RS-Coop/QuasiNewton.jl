@@ -207,15 +207,15 @@ function step!(opt::NewtonOptimizer,
 #     atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
 #     rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
 #
-    atol = NaN
-    rtol = NaN
+    atol = 1e-5
+    rtol = 1e-6
 
     # Solve
     if solver.posdef
-        krylov_solve!(solver.workspace, obj.H, -obj.g, [λ], itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol)
+        krylov_solve!(solver.workspace, obj.H, -obj.g, [λ], itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol, history=stats.history)
         p = solution(solver.workspace)[1]
     else
-        krylov_solve!(solver.workspace, obj.H, -obj.g, λ=λ, itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol)
+        krylov_solve!(solver.workspace, obj.H, -obj.g, λ=λ, itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol, history=stats.history)
         p = solution(solver.workspace)
     end
 
@@ -224,7 +224,7 @@ function step!(opt::NewtonOptimizer,
 
     # Stats
     update_M!(stats, M)
-    update_r!(stats, norm(statistics(solver.workspace).residuals))
+    update_r!(stats, statistics(solver.workspace).residuals[end])
     update_k!(stats, iteration_count(solver.workspace))
 
     # Update
@@ -285,6 +285,11 @@ function backtrack_armijo(opt::NewtonOptimizer,
     p_norm = twonorm(p)
 
     gTp = dot(obj.g, p)
+
+    if gTp > 0
+        p .*= -1.0
+        gTp *= -1.0
+    end
 
     s = similar(x)
 

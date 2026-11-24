@@ -124,7 +124,7 @@ Constructor for `ARCSolver`.
 # Returns
 - `ARCSolver` instance with precomputed shifts and workspace
 """
-function ARCSolver(dim::Int; 
+function ARCSolver(dim::Int;
                     type::Type{<:AbstractVector{<:AbstractFloat}}=Vector{Float64},
                     num_shifts::Int=61,
                     krylov_order::Int=0)
@@ -142,8 +142,9 @@ end
 Compute a single ARC step using `ARCSolver`.
 
 # Arguments
-- `opt::NewtonOptimizer`: Optimizer
-- `solver::NewtonSolver`: Solver instance
+- `opt::ARCOptimizer`: Optimizer
+- `solver::ARCSolver`: Solver instance
+- `x::S`: Current iterate
 - `obj:Objective`: Objective function instance
 - `stats::QuasiNewtonStats`: Optimization statistics
 - `tol::Real`: Step tolerance (optional)
@@ -179,7 +180,7 @@ function step!(opt::ARCOptimizer,
     end
 
     # Solve subproblem
-    krylov_solve!(solver.workspace, obj.H, -obj.g, solver.shifts, itmax=solver.krylov_order, timemax=remaining(timer), check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=true)
+    krylov_solve!(solver.workspace, obj.H, -obj.g, solver.shifts, itmax=solver.krylov_order, timemax=remaining(timer), check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=stats.history)
 
     update_k!(stats, iteration_count(solver.workspace))
 
@@ -193,7 +194,7 @@ function step!(opt::ARCOptimizer,
     status = false
     shift_failure = false
     M_new = opt.M
-    
+
     i = findfirst(solver.workspace.converged)
 
     if i === nothing
@@ -223,7 +224,7 @@ function step!(opt::ARCOptimizer,
                 M_new = twonorm(X[j+1]) / solver.shifts[j+1]
                 j += 1
             end
-            
+
         # Successful
         else
             status = true

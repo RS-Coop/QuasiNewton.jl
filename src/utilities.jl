@@ -4,8 +4,6 @@ Author: Cooper Simpson
 QuasiNewton optimizer stats and miscellaneous utilities.
 =#
 
-using StatsBase: mean
-
 #########################################################
 # QuasiNewton optimization statistics
 #########################################################
@@ -69,7 +67,7 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "Minimum:                 %9.2e\n", length(stats.f_seq) != 0 ? stats.f_seq[end] : missing)
     @printf(io, "Gradient Norm:           %9.2e\n", length(stats.g_seq) != 0 ? stats.g_seq[end] : missing)
 
-    println()
+    println(io)
 
     @printf(io, "Evaluations:\n")
     @printf(io, "      Total:             %9d\n", stats.f_evals+stats.g_evals+stats.hvp_evals)
@@ -77,22 +75,25 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "   Gradient:             %9d\n", stats.g_evals)
     @printf(io, "    Hessian:             %9d\n", stats.hvp_evals)
 
-    println()
+    println(io)
 
     @printf(io, "Est. Hessian Lipschitz Constant:\n")
     printstat(io, "           Max:", maximum_or_missing(stats.M_seq))
     printstat(io, "           Avg:", mean_or_missing(stats.M_seq))
-    println()
+
+    println(io)
 
     @printf(io, "Krylov Iterations:\n")
     printstat(io, "              Max:", maximum_or_missing(stats.k_seq))
     printstat(io, "              Avg:", mean_or_missing(stats.k_seq))
-    println()
+
+    println(io)
 
     @printf(io, "Residual Norm:\n")
     printstat(io, "          Max:", maximum_or_missing(stats.r_seq))
     printstat(io, "          Avg:", mean_or_missing(stats.r_seq))
-    println()
+
+    println(io)
 
     @printf(io, "Status: %26s\n", stats.status)
     @printf(io, "##################################\n")

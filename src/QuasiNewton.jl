@@ -11,11 +11,12 @@ module QuasiNewton
 
 	using Printf
 	using LinearAlgebra
-	using LinearOperators
-	using DifferentiationInterface: prepare_gradient, prepare_hvp_same_point, value_and_gradient!, hvp!
-	using Krylov: KrylovWorkspace, CgLanczosShiftWorkspace, SymmlqWorkspace, krylov_solve!, iteration_count, issolved, solution, statistics
+	using Statistics: mean
+	using LinearOperators: AbstractLinearOperator
+	using DifferentiationInterface: hvp!, prepare_gradient, prepare_hvp_same_point, value_and_gradient!
+	using Krylov: CgLanczosShiftWorkspace, KrylovWorkspace, SymmlqWorkspace, issolved, iteration_count, krylov_solve!, solution, statistics
 
-	export rsfn!, arc!, newton!
+	export arc!, newton!, rsfn!
 
 	include("utilities.jl")
 	include("hvp.jl")
@@ -24,7 +25,7 @@ module QuasiNewton
 	include("minimize.jl")
 
 	#########################################################
-	# High-level interfaces
+	# Optimizer
 	#########################################################
 
 	@inline function get_optimizer(::Val{:newton}, dim::Int; kwargs...)
@@ -39,157 +40,35 @@ module QuasiNewton
 		return ARCOptimizer(dim; kwargs...)
 	end
 
-	"""
-	Minimizes a scalar function `f` starting from initial guess `x` using the specified optimizer and automatic differentiation backend.
+	#########################################################
 
-	# Arguments
-	- `x::AbstractVector`: Initial guess for the solution
-	- `f::Function`: Objective function
-	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`)
-	- `ad_backend`: Automatic differentiation backend
-	- `max_iter::Int=1000`: Maximum number of iterations
-	- `max_time::Real=Inf`: Maximum allowed time
-	- `history::Bool=false`: If true, stores iteration history
-	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor
+	function _minimize!(optimizer::Val, x::S, obj_args::Vararg{Any,N};
+						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, opt_kwargs...
+		) where {S<:AbstractVector{<:AbstractFloat}, N}
 
-	# Updates
-	- `x`: Approximate solution
+		opt = get_optimizer(optimizer, length(x); opt_kwargs...)
+		obj = Objective(x, obj_args...)
 
-	# Returns
-	- `stats`: Optimization statistics including final solution, convergence info, and optionally history
-	"""
-	function minimize!(x::S, f::F, optimizer::Val{optimizer_}, ad_backend;
-						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F, optimizer_}
-
-		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
-		obj = Objective(x, f, ad_backend)
-		
 		return minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
 	end
 
 	"""
-	Minimizes a scalar function `f` starting from initial guess `x` with provided gradient `fg!` and Hessian `H` using the specified optimizer.
-
-	# Arguments
-	- `x::AbstractVector`: Initial guess for the solution
-	- `f::Function`: Objective function
-	- `fg!::Function`: In-place gradient function
-	- `H`: Hessian or Hessian-like operator
-	- `::Val{optimizer}`: Optimizer type (e.g., `:newton`, `:rsfn`, `:arc`)
-	- `max_iter::Int=1000`: Maximum number of iterations
-	- `max_time::Real=Inf`: Maximum allowed time
-	- `history::Bool=false`: If true, stores iteration history
-	- `kwargs...`: Additional keyword arguments forwarded to optimizer constructor
-
-	# Updates
-	- `x`: Approximate solution
-
-	# Returns
-	- `stats`: Optimization statistics including final solution, convergence info, and optionally history
 	"""
-	function minimize!(x::S, f::F1, fg!::F2, H::L, optimizer::Val{optimizer_};
-						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L, optimizer_}
+	function minimize!(optimizer::Val, x::S, f::F1, fg!::F2, H::L; kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L}
+		return _minimize!(optimizer, x, f, fg!, H; kwargs...)
+	end
 
-		opt = get_optimizer(optimizer, size(x, 1); kwargs...)
-		obj = Objective(x, f, fg!, H)
-		
-		return minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
+	"""
+
+	"""
+	function minimize!(optimizer::Val, x::S, f::F, ad_backend; kwargs...) where {S<:AbstractVector{<:AbstractFloat}, F}
+	    return _minimize!(optimizer, x, f, ad_backend; kwargs...)
 	end
 
 	#########################################################
-	# Newton
-	#########################################################
 
-	function newton!(x::S, f::F, ad_backend;
-						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F}
-
-		opt = NewtonOptimizer(size(x,1); kwargs...)
-		obj = Objective(x, f, ad_backend)
-
-		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
-
-		return stats
-	end
-
-	function newton!(x::S, f::F1, fg!::F2, H::L;
-						max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L}
-
-		opt = NewtonOptimizer(size(x,1); kwargs...)
-		obj = Objective(x, f, fg!, H)
-
-		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
-
-		return stats
-	end
-
-	#########################################################
-	# R-SFN
-	#########################################################
-
-	function rsfn!(x::S, f::F, ad_backend;
-					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F}
-
-		opt = RSFNOptimizer(size(x,1); kwargs...)
-		obj = Objective(x, f, ad_backend)
-
-		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
-
-		return stats
-	end
-
-	function rsfn!(x::S, f::F1, fg!::F2, H::L;
-					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L}
-
-		opt = RSFNOptimizer(size(x,1); kwargs...)
-		obj = Objective(x, f, fg!, H)
-
-		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
-
-		return stats
-	end
-
-	#########################################################
-	# ARC
-	#########################################################
-
-	function arc!(x::S, f::F, ad_backend;
-					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F}
-
-		opt = ARCOptimizer(size(x,1); kwargs...)
-		obj = Objective(x, f, ad_backend)
-
-		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
-
-		return stats
-	end
-
-	function arc!(x::S, f::F1, fg!::F2, H::L;
-					max_iter::Int=1000, max_time::Real=Inf, history::Bool=false, kwargs...
-		) where {S<:AbstractVector{<:AbstractFloat}, F1, F2, L}
-		
-		opt = ARCOptimizer(size(x,1); kwargs...)
-		obj = Objective(x, f, fg!, H)
-
-		stats = minimize!(opt, x, obj; max_iter=max_iter, max_time=max_time, history=history)
-
-		return stats
-	end
-
-	#########################################################
-	# Optional package loading
-	#########################################################
-
-	using Requires
-
-	function __init__()
-		return nothing
-	end
+	arc!(x, args...; kwargs...) = _minimize!(Val(:arc), x, args...; kwargs...)
+	newton!(x, args...; kwargs...) = _minimize!(Val(:newton), x, args...; kwargs...)
+	rsfn!(x, args...; kwargs...) = _minimize!(Val(:rsfn), x, args...; kwargs...)
 
 end

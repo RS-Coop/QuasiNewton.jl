@@ -49,10 +49,10 @@ Constructor for `RSFNOptimizer`.
 - `solver`: Search direction solver type (default: `LFASolver`)
 - `M::Float`: Hessian Lipschitz constant (default: `NaN` for auto-estimation)
 - `η::Float`: Stepsize in (0,1] (default: `1.0`)
-- `M₊::Float`: M increase factor in [1,∞) (default: `2.0`)
+- `M₊::Float`: M increase factor in [1,∞) (default: `10.0`)
 - `M₋::Float`: M decrease factor in (0,1] (default: `0.25`)
 - `η₋::Float`: η decrease factor in (0,1) (default: `0.5`)
-- `η_min::Float`: Minimum η in (0,1] (default: `1e-2`)
+- `η_min::Float`: Minimum η in (0,1] (default: `2e-5`)
 - `linesearch::Function`: Optional linesearch function (default: `search_η!`)
 - `atol::Float`: Absolute gradient norm tolerance (default: `1e-5`)
 - `rtol::Float`: Relative gradient norm tolerance (default: `1e-6`)
@@ -111,7 +111,7 @@ Perform setup operations before beginning optimization process.
 
     # Estimate regularization
     if isnan(opt.M)
-        samples = ceil(Int, log2(length(x)))
+        samples = max(1, ceil(Int, log2(length(x))))
         M_est = estimate_M(x, obj, stats; samples=samples)
         opt.M = clamp(M_est, R(1e-12), R(1e16))
     end
@@ -147,7 +147,8 @@ Full eigendecomposition R-SFN search direction solver.
 struct EigenSolver{S<:AbstractVector{<:AbstractFloat}, M<:AbstractMatrix{<:AbstractFloat}}  <: QuasiNewtonSolver
     eigenstep::Bool # add eigenstep in negative eigenspace
     p::S # search direction
-    cache::S # temporary memory
+    cache1::S # temporary memory
+    cache2::S # temporary memory
     H_cache::M # temporary Hessian memory
 end
 
@@ -166,7 +167,7 @@ function EigenSolver(dim::Int;
                         eigenstep::Bool=false
     ) where {R<:AbstractFloat}
 
-    return EigenSolver(eigenstep, type(undef, dim), type(undef, dim), Matrix{R}(undef, dim, dim))
+    return EigenSolver(eigenstep, type(undef, dim), type(undef, dim), type(undef, dim), Matrix{R}(undef, dim, dim))
 end
 
 """
@@ -199,8 +200,10 @@ function step!(opt::RSFNOptimizer,
 
     obj.eigmin = μ
 
-    #
+    # Precomputation
     vi = @view E.vectors[:,i]
+    mul!(solver.cache1, E.vectors', -obj.g)
+    α = solver.cache1[i]
 
     #
     function p!(M::R=opt.M)
@@ -208,12 +211,8 @@ function step!(opt::RSFNOptimizer,
         λ = regularizer(opt, M, obj.g_norm)
 
         # Update search direction
-        mul!(solver.cache, E.vectors', -obj.g)
-
-        α = solver.cache[i] # save this inner product for later
-
-        @. solver.cache /= sqrt(E.values^2 + λ)
-        mul!(solver.p, E.vectors, solver.cache)
+        @. solver.cache2 = solver.cache1 / sqrt(E.values^2 + λ)
+        mul!(solver.p, E.vectors, solver.cache2)
 
         #
         if solver.eigenstep && M > 0 && μ < 0 && 36*λ ≤ μ^2
@@ -275,7 +274,7 @@ Constructor for `LFASolver`.
 # Arguments
 - `dim::Int`: Problem dimension
 - `type`: Vector type (default: `Vector{Float64}`)
-- `depth::Int`: Target Krylov subspace depth (default: `ceil(log2(dim))`)
+- `depth::Int`: Target Krylov subspace depth (default: `2`)
 - `adapt::Bool`: Whether to adapt Krylov depth dynamically (default: `true`)
 - `min_depth::Int`: Minimum Krylov depth if `adapt=true` (default: `2`)
 - `max_depth::Int`: Maximum Krylov depth if `adapt=true` (default: `dim`)
@@ -288,7 +287,7 @@ Constructor for `LFASolver`.
 """
 function LFASolver(dim::Int;
                     type::Type{<:AbstractVector{R}}=Vector{Float64},
-                    depth::Int=2, #dim ≤ 10 ? dim : ceil(Int, log2(dim)),
+                    depth::Int=2,
                     adapt::Bool=true,
                     max_depth::Int=dim,
                     min_depth::Int=2,
@@ -346,7 +345,7 @@ function step!(opt::RSFNOptimizer,
     update_k!(stats, solver.depth)
 
     if !status
-        stats.status = stats.status = "Time limit exceeded"
+        stats.status = "Time limit exceeded"
         return status
     end
 
@@ -357,7 +356,7 @@ function step!(opt::RSFNOptimizer,
 
     obj.eigmin = μ
 
-    # views
+    # Views
     v1 = @view E.vectors[1,:] # NOTE: This is the first entry of each eigenvector
     vi = @view E.vectors[:,i]
     cache1 = @view solver.cache1[1:solver.depth]
@@ -620,7 +619,7 @@ function linesearch!(opt::RSFNOptimizer,
                     M/η # increase regularization
                 end
 
-            opt.M = clamp(M_est, 1e-12, 1e32)
+            opt.M = clamp(M_est, R(1e-12), R(1e32))
 
             status = true
             break

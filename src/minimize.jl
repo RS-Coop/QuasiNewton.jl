@@ -59,10 +59,10 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     g_tol = opt.atol + opt.rtol*obj.g_norm
     H_tol = sqrt(g_tol)
 
+    # NOTE: We should combine this with a the else branch for setup and then use the return statement at bottom, hav obj save eval details
     # Initial check
     if obj.g_norm ≤ g_tol && -H_tol ≤ obj.eigmin
-        converged = true
-        stats.converged = converged
+        stats.converged = true
         return stats
     end
 
@@ -73,12 +73,11 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     while !converged && iterations ≤ max_iter
 
         # Check
-        if obj.fval == -Inf
-            stats.status = "Function unbounded below (?)"
-            converged = true
+        if isinf(obj.fval)
+            stats.status = "Error in function evaluation (Inf)"
             break
         elseif isnan(obj.fval)
-            stats.status = "Error in function evaluation"
+            stats.status = "Error in function evaluation (NaN)"
             break
         elseif isnan(obj.g_norm)
             stats.status = "Error in gradient evaluation"

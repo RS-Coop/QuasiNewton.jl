@@ -28,15 +28,6 @@ LinearAlgebra.ishermitian(H::HvpOperator) = true
 LinearAlgebra.issymmetric(H::HvpOperator) = true
 
 """
-Resets the number of Hessian-vector products performed by the operator.
-"""
-@inline function reset!(H::HvpOperator)
-	H.nprod = 0
-
-	return nothing
-end
-
-"""
 Form the full Hessian matrix from a Hessian-vector product operator.
 
 # Returns
