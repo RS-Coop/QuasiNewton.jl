@@ -8,6 +8,23 @@ QuasiNewton optimizer stats and miscellaneous utilities.
 # QuasiNewton optimization statistics
 #########################################################
 
+"""
+Optimization statistics.
+
+# Fields
+    - `converged::Bool`: Whether optimization converged
+    - `iterations::Int`: Number of iterations performed
+    - `function_evals::Int`: Number of function evaluations
+    - `gradient_evals::Int`: Number of gradient evaluations
+    - `hessian_evals::Int`: Number of Hessian-vector product evaluations
+    - `runtime::Float64`: Total time spent in seconds
+    - `function_values::Vector{R}`: Function values if `history=true`
+    - `gradient_norms::Vector{R}`: Gradient norms if `history=true`
+    - `regularization_values::Vector{R}`: Regularization values `history=true`
+    - `krylov_iterations::Vector{Int}`: Krylov iteration counts if `history=true`
+    - `residual_norms::Vector{R}`: Residual norms if `history=true`
+    - `status::String`: Exit status
+"""
 mutable struct QuasiNewtonStats{R<:Real}
     const history::Bool # sequence history
     converged::Bool # whether optimizer has converged
@@ -18,15 +35,16 @@ mutable struct QuasiNewtonStats{R<:Real}
     hessian_evals::Int # number of hessian evaluations
     function_values::Vector{R} # function value sequence
     gradient_norms::Vector{R} # gradient norm sequence
-    regularization_values::Vector{Union{R,Missing}} # regularization tracking
-    krylov_iterations::Vector{Union{Int,Missing}} # number of Krylov iterations
+    regularization_values::Vector{Union{R,Missing}} # regularization value sequence
+    krylov_iterations::Vector{Union{Int,Missing}} # krylov iterations sequence
     residual_norms::Vector{Union{R,Missing}} # residual norm sequence
     status::String # exit status
 
     function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
         return new{R}(history, false,
                         0, 0.0, 0, 0, 0,
-                        Vector{R}(undef,Int(!history)), Vector{R}(undef,Int(!history)),
+                        history ? R[] : [R(Inf)],
+                        history ? R[] : [R(Inf)],
                         history ? R[] : Union{R,Missing}[missing],
                         history ? Int[] : Union{Int,Missing}[missing],
                         history ? R[] : Union{R,Missing}[missing],
@@ -34,38 +52,45 @@ mutable struct QuasiNewtonStats{R<:Real}
     end
 end
 
-function update_f!(stats::QuasiNewtonStats, val::R) where {R}
+function update_f!(stats::QuasiNewtonStats, val::Real)
     stats.history ? push!(stats.function_values, val) : stats.function_values[1] = val
     return nothing
 end
 
-function update_g!(stats::QuasiNewtonStats, val::R) where {R}
+function update_g!(stats::QuasiNewtonStats, val::Real)
     stats.history ? push!(stats.gradient_norms, val) : stats.gradient_norms[1] = val
     return nothing
 end
 
-function update_M!(stats::QuasiNewtonStats, val::R) where {R}
+function update_M!(stats::QuasiNewtonStats, val::Real)
     stats.history ? push!(stats.regularization_values, val) : nothing
     return nothing
 end
 
-function update_k!(stats::QuasiNewtonStats, val::Int)
+function update_k!(stats::QuasiNewtonStats, val::Integer)
     stats.history ? push!(stats.krylov_iterations, val) : nothing
     return nothing
 end
 
-function update_r!(stats::QuasiNewtonStats, val::R) where {R}
+function update_r!(stats::QuasiNewtonStats, val::Real)
     stats.history ? push!(stats.residual_norms, val) : nothing
     return nothing
 end
 
 function Base.show(io::IO, stats::QuasiNewtonStats)
+    print(io, "QuasiNewtonStats(converged=", stats.converged,
+              ", minimum=", last_or_missing(stats.function_values),
+              ", gradient_norm=", last_or_missing(stats.gradient_norms),
+              "\")")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", stats::QuasiNewtonStats)
     @printf(io, "##################################\n")
     @printf(io, "Converged:               %9s\n", stats.converged)
     @printf(io, "Iterations:              %9d\n", stats.iterations)
     @printf(io, "Runtime (s):             %9.2e\n", stats.runtime)
-    @printf(io, "Minimum:                 %9.2e\n", length(stats.function_values) != 0 ? stats.function_values[end] : missing)
-    @printf(io, "Gradient Norm:           %9.2e\n", length(stats.gradient_norms) != 0 ? stats.gradient_norms[end] : missing)
+    printstat(io, "Minimum:         ", last_or_missing(stats.function_values))
+    printstat(io, "Gradient Norm:    ", last_or_missing(stats.gradient_norms))
 
     println(io)
 
@@ -99,22 +124,20 @@ function Base.show(io::IO, stats::QuasiNewtonStats)
     @printf(io, "##################################\n")
 end
 
-"""
-Printing utilities.
-"""
+#########################################################
+# Printing utilities
+#########################################################
+
 const LABEL_WIDTH = 18
 const VALUE_WIDTH = 16
 
+last_or_missing(itr) = isempty(itr) ? missing : last(itr)
 maximum_or_missing(itr) = isempty(itr) ? missing : maximum(itr)
 mean_or_missing(itr) = isempty(itr) ? missing : mean(itr)
 
-function printstat(io, label, x)
-    if ismissing(x)
-        @printf(io, "%-*s%*s\n", LABEL_WIDTH, label, VALUE_WIDTH, "missing")
-    else
-        @printf(io, "%-*s%*.2e\n", LABEL_WIDTH, label, VALUE_WIDTH, x)
-    end
-end
+printstat(io::IO, label, x::Missing) =  @printf(io, "%-*s%*s\n", LABEL_WIDTH, label, VALUE_WIDTH, "missing")
+printstat(io::IO, label, x::AbstractFloat) = @printf(io, "%-*s%*.2e\n", LABEL_WIDTH, label, VALUE_WIDTH, x)
+printstat(io::IO, label, x::Integer) = @printf(io, "%-*s%*d\n", LABEL_WIDTH, label, VALUE_WIDTH, x)
 
 #########################################################
 # Misc utilities
@@ -139,7 +162,7 @@ Runtimer(limit::Real=Inf) = Runtimer(time_ns(), Float64(limit))
 """
 Fast 2-norm with type conversion.
 """
-@inline function twonorm(x::AbstractVector{R}) where {R}
-    y = dot(x, x)
-    return convert(R, sqrt(y))
+@inline function twonorm(x::AbstractVector{<:Real})
+    y = sqrt(dot(x, x))
+    return (iszero(y) || !isfinite(y)) ? norm(x) : y
 end

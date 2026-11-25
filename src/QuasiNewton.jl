@@ -9,18 +9,18 @@ module QuasiNewton
 	# Setup
 	#########################################################
 
-	using Printf
-	using Random
+	using Printf: @printf
+	using Random: randn!
 	using LinearAlgebra
 	using Statistics: mean
-	using LinearOperators: AbstractLinearOperator
+	using SciMLOperators: AbstractSciMLOperator, FunctionOperator, MatrixOperator
 	using DifferentiationInterface: hvp!, prepare_gradient, prepare_hvp_same_point, value_and_gradient!
 	using Krylov: CgLanczosShiftWorkspace, KrylovWorkspace, SymmlqWorkspace, issolved, iteration_count, krylov_solve!, solution, statistics
 
 	export arc!, newton!, rsfn!
 
 	include("utilities.jl")
-	include("hvp.jl")
+	include("hessian.jl")
 	include("objective.jl")
 	include("optimizers/optimizers.jl")
 	include("minimize.jl")

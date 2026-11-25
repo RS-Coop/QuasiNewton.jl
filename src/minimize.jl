@@ -35,19 +35,7 @@ Performs the core iteration loop to minimize a scalar function `f`.
 - `x` with approximate solution
 
 # Returns
-- `stats`: A `QuasiNewtonStats` object containing:
-  - `converged::Bool`: Whether optimization converged
-  - `iterations::Int`: Number of iterations performed
-  - `f_evals::Int`: Number of function evaluations
-  - `g_evals::Int`: Number of gradient evaluations
-  - `hvp_evals::Int`: Number of Hessian-vector product evaluations
-  - `runtime::Float64`: Total time spent in seconds
-  - `f_seq::Vector{R}`: Function values if `history=true`
-  - `g_seq::Vector{R}`: Gradient norms if `history=true`
-  - `r_seq::Vector{R}`: Residual norms (e.g., Krylov solver) if `history=true`
-  - `λ_seq::Vector{R}`: Regularization values if `history=true`
-  - `k_seq::Vector{Int}`: Krylov iteration counts if `history=true`
-  - `status::String`: Exit status
+- `stats`: A `QuasiNewtonStats` object
 """
 function minimize!(opt::Opt, x::S, obj::Objective;
                     max_iter::Int, max_time::Real, history::Bool

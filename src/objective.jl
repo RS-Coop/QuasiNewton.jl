@@ -20,9 +20,9 @@ Objective function.
 - `eigmin::R`: Estimated smallest algebraic Hessian eigenvalue
 - `f::Function`: Objective function
 - `fg!::Function`: In-place gradient function
-- `H::Hv`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`)
+- `H::AbstractSciMLOperator`: Hessian-vector product operator
 """
-mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, O<:HvpOperator}
+mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, O<:AbstractSciMLOperator}
     fval::R # function value
     g::S # gradient
     g_norm::R # gradient norm
@@ -37,56 +37,56 @@ end
 
 dim(obj::Objective) = length(obj.g)
 
-"""
-# Arguments
-- `x::AbstractVector`: Initial guess for the solution
-- `f::Function`: Objective function
-- `fg!::Function`: In-place gradient function
-- `H::Function`: Hessian-vector product operator (either `ADHvpOperator` or `LHvpOperator`)
-"""
-function Objective(x::S, f::F1, fg!::F2, H::Hv) where {R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, Hv<:HvpOperator}
+function Objective(x::S, f::F1, fg!::F2, H::O) where {R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, O<:AbstractSciMLOperator}
     g = similar(x)
     fval = fg!(g, x)
     g_norm = twonorm(g)
 
     eigmin = zero(R)
 
-    return Objective(fval, g, g_norm, eigmin, f, fg!, H, 0, 0, 0)
+    return Objective(R(fval), g, g_norm, eigmin, f, fg!, H, 0, 0, 0)
 end
 
 """
-# Arguments
-- `x::AbstractVector`: Initial guess for the solution
-- `f::Function`: Objective function
-- `fg!::Function`: In-place gradient function
-- `Hf::Function`: Function that computes Hessian-vector products
+Matrix-based Hessian construction.
 """
-function Objective(x::S, f::F1, fg!::F2, Hf::F3) where {R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, F3}
-    H = LHvpOperator(Hf, x)
+function Objective(x, f, fg!, H::AbstractMatrix)
+    H = MatrixOperator(H)
 
-    return Objective(x, f, fg!, H, 0, 0, 0)
+    return Objective(x, f, fg!, H)
 end
 
 """
-# Arguments
-- `x::AbstractVector`: Initial guess for the solution
-- `f::Function`: Objective function
-- `ad_backend`: Automatic differentiation backend
+Function-based Hessian construction.
+
+NOTE: FunctionOperator holds callers x (is that a problem?)
 """
-function Objective(x::S, f::F, ad_backend::AD) where {R<:AbstractFloat, S<:AbstractVector{R}, F, AD}
+function Objective(x, f, fg!, hvp!)
+    Hop(w, v, u, p, t) = (hvp!(w, v, u); w)
+    Hop(v, u, p, t) = (w = similar(v); hvp!(w, v, u); w)
+
+    H = FunctionOperator(Hop, x, similar(x);
+                         u = copy(x),
+                         islinear = true,
+                         isconstant = false,
+                         issymmetric = true,
+                         ishermitian = true)
+
+    return Objective(x, f, fg!, H)
+end
+
+"""
+AD-based Hessian construction.
+"""
+function Objective(x, f, ad_backend)
     prep = prepare_gradient(f, ad_backend, x)
     fg! = (g,x) -> value_and_gradient!(f, g, prep, ad_backend, x)[1]
 
-    H = ADHvpOperator(f, x, ad_backend)
+    H = ADHessianOperator(f, x, ad_backend)
 
-    return Objective(x, f, fg!, H, 0, 0, 0)
+    return Objective(x, f, fg!, H)
 end
 
-"""
-# Arguments
-- `x::AbstractVector`: Initial guess for the solution
-- `obj::Objective`: Objective function
-"""
 function Objective(x::S, obj::Objective) where {S<:AbstractVector{<:AbstractFloat}}
     length(x) == dim(obj) || throw(DimensionMismatch("x has length $(length(x)), objective expects $(dim(obj))"))
     return reset!(obj, x)
@@ -97,7 +97,7 @@ end
 function update!(obj::Objective, x::S) where {S<:AbstractVector{<:AbstractFloat}}
     obj.fval = obj.fg!(obj.g, x)
     obj.g_norm = twonorm(obj.g)
-    update!(obj.H, x)
+    SciMLOperators.update_coefficients!(obj.H, x, nothing, nothing)
 
     return obj
 end
@@ -105,9 +105,10 @@ end
 """
 """
 function reset!(obj::Objective, x::S) where {S<:AbstractVector{<:AbstractFloat}}
-    obj.fval = obj.fg!(obj.g, x)
-    obj.g_norm = twonorm(obj.g)
+    update!(obj, x)
+
     obj.eigmin = zero(obj.eigmin)
+    obj.f_evals, obj.g_evals, obj.H_evals = 0, 0, 0
 
     return obj
 end
@@ -117,7 +118,7 @@ end
 #########################################################
 
 function estimate_M(x::AbstractVector{R}, obj::Objective; samples::Int=1) where {R<:AbstractFloat}
-    h = eps(R)^(1/3)*max(one(R), norm(x))
+    h = cbrt(eps(R))*max(one(R), norm(x))
     ζ, xp, g2, y = similar(x), similar(x), similar(x), similar(x)
 
     M_est = zero(R)
@@ -131,7 +132,7 @@ function estimate_M(x::AbstractVector{R}, obj::Objective; samples::Int=1) where 
 end
 
 function estimate_M!(ζ::AbstractVector{R}, x::AbstractVector{R}, obj::Objective) where {R<:AbstractFloat}
-    h = eps(R)^(1/3)*max(one(R), norm(x))
+    h = cbrt(eps(R))*max(one(R), norm(x))
     normalize!(ζ)
     M_est = _estimate_M!(ζ, similar(x), similar(x), similar(x), x, obj, h)
 

@@ -1,10 +1,6 @@
 # Improvements/Features
-- ADHvpOperator mul! without having to convert to Vector
 - What happens if krylov processes for Newton or RN haven't converged?
 - What should be the (default) Krylov tolerance?
-- It would be nice to use a unified operator for the Hessian
-    - SciMLOperators.jl, but how best to do AD?
-    - LinearOperator.jl, but they have no way of updating the operator in place
 - Krylov subspace recycling
 - Should we be reorthogonalizing in Lanczos?
 - Do we need the tolerance we are asking for in LFA?
@@ -15,7 +11,6 @@
 - Extension for other modeling packages
     - SciML Optimization.jl
     - JuliaSmoothOptimizers NLPModels.jl)
-- Should obj own counters? and then pass these off to stats?
 - Be better about type rigidty
   - When promoting (i.e., M::R=10 and then R(1e16)), how to deal with possible Int
   - ARC solver shifts ignores type
@@ -23,6 +18,11 @@
 - Can methods be less allocating
   - Does multiplication by negative, e.g., Newton -g allocated
   - ARC
+- Instead of discarding computed values when `history=false` we could just track the running max/mean somehow
+- Make sure evals are being tracked
+- Should `Objective` own the `x`, I'm not so sure
+- Maybe we should define specific `fg!` and `f` and `hvp` that increment counters for `Objective`
+- Should `Objective` evaluate function and gradient on its first call, If you have to pass x to objective then it seems like yes, but then if you can just pass a dimension, then no, but `minimize` is assuming its already been evaluated, I'm not sure what the best option is
 
 # Method Additions
 - Randomized coordinate projection (ARC and/or R-SFN)
