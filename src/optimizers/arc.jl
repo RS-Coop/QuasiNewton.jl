@@ -175,15 +175,19 @@ function step!(opt::ARC,
     end
 
     # Solve subproblem
-    krylov_solve!(solver.workspace, obj.H, -obj.g, solver.shifts, itmax=solver.krylov_order, timemax=remaining(timer), check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=stats.history)
+    krylov_solve!(solver.workspace, obj.H, obj.g, solver.shifts, itmax=solver.krylov_order, timemax=remaining(timer), check_curvature=true, atol=atol, rtol=rtol, callback=cb, history=stats.history)
 
-    update_k!(stats, iteration_count(solver.workspace))
+    # Record Hessian products
+    obj.H_evals += Aprod_count(solver.workspace) + Atprod_count(solver.workspace)
+
+    # Update stats
+    record!(stats; krylov_iters=iteration_count(solver.workspace))
 
     # Cubic sub-problem
     res = similar(x)
     @inline cubic_subprob = (d) -> begin
         mul!(res, obj.H, d); obj.H_evals += 1
-        return obj.fval + dot(obj.g, d) + 0.5*dot(d, res)
+        return obj.f_val - dot(obj.g, d) + 0.5*dot(d, res)
     end
 
     status = false
@@ -199,10 +203,10 @@ function step!(opt::ARC,
 
     X = solution(solver.workspace)
 
-    j = argmin(abs.(opt.M*solver.shifts[i:end] - twonorm.(X[i:end]))) + i - 1
+    j = argmin(k -> abs(opt.M*solver.shifts[k] - twonorm(X[k])), i:length(solver.shifts))
 
     while !status && !shift_failure
-        ρ = (obj.fval - obj.f(x + X[j])) / (obj.fval - cubic_subprob(X[j])); obj.f_evals += 1
+        ρ = (obj.f_val - obj.f(x - X[j])) / (obj.f_val - cubic_subprob(X[j])); obj.f_evals += 1
 
         # Unsuccessful
         if ρ < opt.η1
@@ -222,11 +226,11 @@ function step!(opt::ARC,
         else
             status = true
 
-            update_M!(stats, solver.shifts[j])
-            update_r!(stats, solver.workspace.rNorms[j])
+            # Update stats
+            record!(stats; reg_val=solver.shifts[j], res_norm=solver.workspace.rNorms[j])
 
             # Update
-            x .+= X[j]
+            x .-= X[j]
 
             # Very successful
             if ρ > opt.η2

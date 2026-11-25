@@ -53,8 +53,7 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     reset!(obj, x)
 
     # Initial stats
-    update_f!(stats, obj.fval)
-    update_g!(stats, obj.g_norm)
+    record!(stats, f_val=obj.f_val, g_norm=obj.g_norm)
 
     # Tolerance
     g_tol = opt.atol + opt.rtol*obj.g_norm
@@ -74,10 +73,10 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     while !converged && iterations ≤ max_iter
 
         # Check
-        if isinf(obj.fval)
+        if isinf(obj.f_val)
             stats.status = "Error in function evaluation (Inf)"
             break
-        elseif isnan(obj.fval)
+        elseif isnan(obj.f_val)
             stats.status = "Error in function evaluation (NaN)"
             break
         elseif isnan(obj.g_norm)
@@ -109,8 +108,7 @@ function minimize!(opt::Opt, x::S, obj::Objective;
         update!(obj, x)
 
         # Update stats
-        update_f!(stats, obj.fval)
-        update_g!(stats, obj.g_norm)
+        record!(stats, f_val=obj.f_val, g_norm=obj.g_norm)
 
         # Increment
         iterations += 1

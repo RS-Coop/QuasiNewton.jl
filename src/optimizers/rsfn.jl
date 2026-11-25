@@ -63,15 +63,20 @@ Constructor for `RSFN`.
 """
 function RSFN(dim::Int;
                         solver::Solver=LFASolver,
-                        M::R1=NaN, M₊::R2=1e1, M₋::R2=0.25,
-                        η::R2=1.0, η₋::R2=0.5, η_min::R2=2^-5,
-                        linesearch::F=linesearch!,
-                        atol::R2=1e-5, rtol::R2=1e-6,
+                        M::Union{Nothing,Real}=nothing, M₊::Real=1e1, M₋::Real=0.25,
+                        η::Real=1.0, η₋::Real=0.5, η_min::Real=2^-5,
+                        linesearch::Function=linesearch!,
+                        atol::Real=1e-5, rtol::Real=1e-6,
                         kwargs...
-    ) where {Solver, R1<:Real, F, R2<:AbstractFloat}
+    ) where {Solver}
 
     # Hessian Lipschitz constant
-    @assert isnan(M) || 0 ≤ M
+    if isnothing(M)
+        M = NaN
+    else
+        @assert 0 ≤ M
+    end
+
     @assert 1 ≤ M₊ && 0 < M₋ ≤ 1
 
     # Linesearch parameters
@@ -85,7 +90,7 @@ function RSFN(dim::Int;
     # Solver
     solver_ = solver(dim; kwargs...)
 
-    return RSFN(solver_, R2(M), M₊, M₋, η, η₋, η_min, linesearch, atol, rtol)
+    return RSFN(solver_, M, M₊, M₋, η, η₋, η_min, linesearch, atol, rtol)
 end
 
 """
@@ -195,17 +200,20 @@ function step!(opt::RSFN,
     # Eigendecomposition
     E = eigen!(Matrix!(solver.H_cache, obj.H))
 
+    # Record Hessian products
+    obj.H_evals += dim(obj)
+
     μ, i = findmin(E.values)
 
     obj.eigmin = μ
 
     # Precomputation
     vi = @view E.vectors[:,i]
-    mul!(solver.cache1, E.vectors', -obj.g)
+    mul!(solver.cache1, E.vectors', obj.g, -one(R), zero(R))
     α = solver.cache1[i]
 
     #
-    function p!(M::R=opt.M)
+    function p!(M)
         # Regularization
         λ = regularizer(opt, M, obj.g_norm)
 
@@ -228,12 +236,13 @@ function step!(opt::RSFN,
     # Linesearch
     η, M, status = opt.linesearch!(opt, x, p!, obj, stats, timer=timer)
 
-    update_M!(stats, M)
-
     # Update
     if status
         @. x += η*solver.p
     end
+
+    # Update stats
+    record!(stats; reg_val=M)
 
     return status
 end
@@ -333,7 +342,6 @@ function step!(opt::RSFN,
                 x::S,
                 obj::Objective,
                 stats::QuasiNewtonStats;
-                tol::R=NaN,
                 timer::Runtimer=Runtimer()
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
@@ -341,7 +349,10 @@ function step!(opt::RSFN,
     Q, T, βₖ₊₁, status = lanczos(solver.workspace, obj.H, obj.g, solver.depth;
                                     reorthogonalize=false, timer=timer)
 
-    update_k!(stats, solver.depth)
+    solver.depth = size(Q, 2) # in case of early exit
+
+    # Record Hessian products
+    obj.H_evals += solver.depth
 
     if !status
         stats.status = "Time limit exceeded"
@@ -361,7 +372,7 @@ function step!(opt::RSFN,
     cache1 = @view solver.cache1[1:solver.depth]
     cache2 = @view solver.cache2[1:solver.depth]
 
-    function p!(M::R)
+    function p!(M)
         # Regularization
         λ = regularizer(opt, M, obj.g_norm)
 
@@ -385,39 +396,36 @@ function step!(opt::RSFN,
     # Linesearch
     η, M, status = opt.linesearch!(opt, x, p!, obj, stats; timer=timer)
 
-    update_M!(stats, M)
+    # Compute residual
+    # @. cache1 = v1 / E.values
+    @views z = dot(E.vectors[solver.depth,:], cache1)
+    r_norm = abs(obj.g_norm*βₖ₊₁*z)
 
-    if status
-        # Compute residual
-        # @. cache1 = v1 / E.values
-        @views z = dot(E.vectors[solver.depth,:], cache1)
-        r_norm = abs(obj.g_norm*βₖ₊₁*z)
+    # Tolerance
+    ζ = 0.5
+    ξ = R(0.01)
 
-        # Tolerance
-        if isnan(tol)
-            ζ = 0.5
-            ξ = R(0.01)
+    atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
+    rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
 
-            atol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(1+ζ)))
-            rtol = max(sqrt(eps(R)), min(ξ, ξ*obj.g_norm^(ζ)))
+    tol = atol + obj.g_norm*rtol
 
-            tol = atol + obj.g_norm*rtol
+    # Depth change
+    if solver.min_depth != solver.max_depth
+        if r_norm ≥ tol
+            solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.inc_depth))
+        elseif r_norm ≤ R(1e-2)*tol
+            solver.depth = max(solver.min_depth, floor(Int, solver.depth*solver.dec_depth))
         end
-
-        # Depth change
-        if solver.min_depth != solver.max_depth
-            if r_norm ≥ tol
-                solver.depth = min(solver.max_depth, ceil(Int, solver.depth*solver.inc_depth))
-            elseif r_norm ≤ R(1e-2)*tol
-                solver.depth = max(solver.min_depth, floor(Int, solver.depth*solver.dec_depth))
-            end
-        end
-
-        # Update
-        @. x += η*solver.p
-
-        update_r!(stats, r_norm)
     end
+
+    # Update
+    if status
+        @. x += η*solver.p
+    end
+
+    # Update stats
+    record!(stats; reg_val=M, krylov_iters=solver.depth, res_norm=r_norm)
 
     return status
 end
@@ -503,8 +511,6 @@ function step!(opt::RSFN,
 
     Q, T, B1 = block_lanczos(obj.H, solver.Ω, solver.depth; reorthogonalize=true)
 
-    update_k!(stats, solver.depth)
-
     E = eigen(T) # Maybe replace this with LAPACK block diagonal solve
 
     if solver.enrichment
@@ -532,6 +538,9 @@ function step!(opt::RSFN,
     if status
         @. x += η*solver.p
     end
+
+    # Update stats
+    record!(stats; reg_val=M, krylov_iters=solver.depth)
 
     return status
 end
@@ -584,7 +593,7 @@ function linesearch!(opt::RSFN,
 
     # Setup
     status = false
-    f0 = obj.fval
+    f0 = obj.f_val
     η = one(R)
     M = opt.M
 
@@ -668,7 +677,7 @@ function backtrack_armijo(opt::RSFN,
 
     # Setup
     status = false
-    f0 = obj.fval
+    f0 = obj.f_val
     η = one(R)
     M = opt.M
     c = R(1e-4)

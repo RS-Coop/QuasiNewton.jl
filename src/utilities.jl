@@ -52,30 +52,18 @@ mutable struct QuasiNewtonStats{R<:AbstractFloat}
     end
 end
 
-function update_f!(stats::QuasiNewtonStats, val::Real)
-    stats.history ? push!(stats.function_values, val) : stats.function_values[1] = val
+function record!(stats::QuasiNewtonStats; f_val=nothing, g_norm=nothing, reg_val=nothing, krylov_iters=nothing, res_norm=nothing)
+    _record!(stats.function_values, f_val, stats.history, true)
+    _record!(stats.gradient_norms, g_norm, stats.history, true)
+    _record!(stats.regularization_values, reg_val, stats.history, false)
+    _record!(stats.krylov_iterations, krylov_iters, stats.history, false)
+    _record!(stats.residual_norms, res_norm, stats.history, false)
+
     return nothing
 end
 
-function update_g!(stats::QuasiNewtonStats, val::Real)
-    stats.history ? push!(stats.gradient_norms, val) : stats.gradient_norms[1] = val
-    return nothing
-end
-
-function update_M!(stats::QuasiNewtonStats, val::Real)
-    stats.history ? push!(stats.regularization_values, val) : nothing
-    return nothing
-end
-
-function update_k!(stats::QuasiNewtonStats, val::Integer)
-    stats.history ? push!(stats.krylov_iterations, val) : nothing
-    return nothing
-end
-
-function update_r!(stats::QuasiNewtonStats, val::Real)
-    stats.history ? push!(stats.residual_norms, val) : nothing
-    return nothing
-end
+_record!(v, ::Nothing, history, keep_last) = nothing
+_record!(v, val, history, keep_last) = history ? push!(v, val) : (keep_last && (v[1] = val); nothing)
 
 function Base.show(io::IO, stats::QuasiNewtonStats)
     print(io, "QuasiNewtonStats(converged=", stats.converged,

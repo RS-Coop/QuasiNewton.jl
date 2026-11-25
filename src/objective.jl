@@ -14,7 +14,7 @@ export Objective
 Objective function.
 
 # Fields
-- `fval::R`: Current function value at `x`
+- `f_val::R`: Current function value at `x`
 - `g::S`: Gradient vector at `x`
 - `g_norm::R`: Gradient norm
 - `eigmin::R`: Estimated smallest algebraic Hessian eigenvalue
@@ -23,7 +23,7 @@ Objective function.
 - `H::AbstractSciMLOperator`: Hessian-vector product operator
 """
 mutable struct Objective{R<:AbstractFloat, S<:AbstractVector{R}, F1, F2, O<:AbstractSciMLOperator}
-    fval::R # function value
+    f_val::R # function value
     g::S # gradient
     g_norm::R # gradient norm
     eigmin::R # minimum Hessian eigenvalue
@@ -96,7 +96,7 @@ end
 """
 """
 function update!(obj::Objective, x::S) where {S<:AbstractVector{<:AbstractFloat}}
-    obj.fval = obj.fg(obj.g, x)
+    obj.f_val = obj.fg(obj.g, x)
     obj.g_norm = twonorm(obj.g)
     obj.f_evals += 1
     obj.g_evals += 1

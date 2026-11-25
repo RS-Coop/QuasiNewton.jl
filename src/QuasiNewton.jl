@@ -15,7 +15,7 @@ module QuasiNewton
 	using Statistics: mean
 	using SciMLOperators: AbstractSciMLOperator, FunctionOperator, MatrixOperator
 	using DifferentiationInterface: hvp!, prepare_gradient, prepare_hvp_same_point, value_and_gradient!
-	using Krylov: CgLanczosShiftWorkspace, KrylovWorkspace, SymmlqWorkspace, issolved, iteration_count, krylov_solve!, solution, statistics
+	using Krylov: Aprod_count, Atprod_count, CgLanczosShiftWorkspace, KrylovWorkspace, SymmlqWorkspace, issolved, iteration_count, krylov_solve!, solution, statistics
 
 	export arc!, newton!, rsfn!
 

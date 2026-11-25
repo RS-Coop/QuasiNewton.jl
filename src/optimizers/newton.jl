@@ -49,15 +49,19 @@ Constructor for `Newton`.
 """
 function Newton(dim::Int;
                             posdef::Bool=false,
-                            M::R1=0,
-                            η::R2=1.0, η₋::R2=0.5,
-                            linesearch::F=backtrack_armijo,
-                            atol::R2=1e-5, rtol::R2=1e-6,
+                            M::Union{Nothing,Real}=0,
+                            η::Real=1.0, η₋::Real=0.5,
+                            linesearch::Function=backtrack_armijo,
+                            atol::Real=1e-5, rtol::Real=1e-6,
                             kwargs...
-    ) where {R1<:Real, F, R2<:AbstractFloat}
+    )
 
     # Hessian Lipschitz constant
-    @assert isnan(M) || 0 ≤ M
+    if isnothing(M)
+        M = NaN
+    else
+        @assert 0 ≤ M
+    end
 
     # Linesearch parameters
     if isnothing(linesearch)
@@ -70,7 +74,7 @@ function Newton(dim::Int;
     # Solver
     solver = NewtonSolver(dim; posdef=posdef, kwargs...)
 
-    return Newton(solver, R2(M), linesearch, η, η₋, atol, rtol)
+    return Newton(solver, M, linesearch, η, η₋, atol, rtol)
 end
 
 """
@@ -211,24 +215,28 @@ function step!(opt::Newton,
 
     # Solve
     if solver.posdef
-        krylov_solve!(solver.workspace, obj.H, -obj.g, [λ], itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol, history=stats.history)
+        krylov_solve!(solver.workspace, obj.H, obj.g, [λ];
+                        itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol, history=stats.history)
         p = solution(solver.workspace)[1]
     else
-        krylov_solve!(solver.workspace, obj.H, -obj.g, λ=λ, itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol, history=stats.history)
+        krylov_solve!(solver.workspace, obj.H, obj.g;
+                        λ=λ, itmax=solver.krylov_order, timemax=remaining(timer), atol=atol, rtol=rtol, history=stats.history)
         p = solution(solver.workspace)
     end
+
+    # Record Hessian products
+    obj.H_evals += Aprod_count(solver.workspace) + Atprod_count(solver.workspace)
 
     # Linesearch
     η, M, status = opt.linesearch!(opt, p, x, obj, stats)
 
     # Stats
-    update_M!(stats, M)
-    update_r!(stats, statistics(solver.workspace).residuals[end])
-    update_k!(stats, iteration_count(solver.workspace))
+    record!(stats; reg_val=M, krylov_iters=iteration_count(solver.workspace),
+            res_norm=statistics(solver.workspace).residuals[end])
 
     # Update
     if status
-        @. x += η*p
+        @. x -= η*p
     end
 
     return status
@@ -276,14 +284,14 @@ function backtrack_armijo(opt::Newton,
 
     # Setup
     status = false
-    f0  = obj.fval
+    f0  = obj.f_val
     η = one(R)
     M = opt.M
     c = R(1e-4)
 
     p_norm = twonorm(p)
 
-    gTp = dot(obj.g, p)
+    gTp = -dot(obj.g, p)
 
     if gTp > 0
         p .*= -1.0
@@ -301,7 +309,7 @@ function backtrack_armijo(opt::Newton,
         end
 
         # Check descent
-        @. s = x + η*p
+        @. s = x - η*p
         fs = obj.f(s); obj.f_evals += 1
 
         if fs ≤ f0 + η*c*gTp
