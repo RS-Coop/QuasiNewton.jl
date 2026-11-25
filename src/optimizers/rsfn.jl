@@ -105,14 +105,13 @@ Perform setup operations before beginning optimization process.
 """
 @inline function setup!(opt::RSFN,
                         x::S,
-                        obj::Objective,
-                        stats::QuasiNewtonStats
+                        obj::Objective
     ) where {R<:AbstractFloat, S<:AbstractVector{R}}
 
     # Estimate regularization
     if isnan(opt.M)
         samples = max(1, ceil(Int, log2(length(x))))
-        M_est = estimate_M(x, obj, stats; samples=samples)
+        M_est = estimate_M(x, obj; samples=samples)
         opt.M = clamp(M_est, R(1e-12), R(1e16))
     end
 
@@ -606,11 +605,10 @@ function linesearch!(opt::RSFN,
         end
 
         # Check descent
-        stats.f_evals += 1
-
         @. s = x + η*p
+        fs = obj.f(s); obj.f_evals += 1
 
-        if obj.f(s) - f0 ≤ dec*η^2
+        if fs - f0 ≤ dec*η^2
             # Update regularization
             M_est =
                 if isone(η)
@@ -691,12 +689,11 @@ function backtrack_armijo(opt::RSFN,
         end
 
         # Check descent
-        stats.f_evals += 1
-
         @. s = x + η*p
+        fs = obj.f(s); obj.f_evals += 1
 
         # Armijo condition
-        if obj.f(s) ≤ f0 + η*c*gTp
+        if fs ≤ f0 + η*c*gTp
             status = true
             break
         else

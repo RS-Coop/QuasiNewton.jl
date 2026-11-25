@@ -20,9 +20,9 @@
   - ARC
 - Instead of discarding computed values when `history=false` we could just track the running max/mean somehow
 - Make sure evals are being tracked
-- Should `Objective` own the `x`, I'm not so sure
-- Maybe we should define specific `fg!` and `f` and `hvp` that increment counters for `Objective`
-- Should `Objective` evaluate function and gradient on its first call, If you have to pass x to objective then it seems like yes, but then if you can just pass a dimension, then no, but `minimize` is assuming its already been evaluated, I'm not sure what the best option is
+  - I think this is just the operator now
+- How should I name the QuasiNewtonStats update functions and/or deal with that in general
+- The `reset!` call in `minimize!` potentially reruns the AD prep, maybe there is a better way of doing this?
 
 # Method Additions
 - Randomized coordinate projection (ARC and/or R-SFN)

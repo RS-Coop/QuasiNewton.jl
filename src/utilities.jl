@@ -25,7 +25,7 @@ Optimization statistics.
     - `residual_norms::Vector{R}`: Residual norms if `history=true`
     - `status::String`: Exit status
 """
-mutable struct QuasiNewtonStats{R<:Real}
+mutable struct QuasiNewtonStats{R<:AbstractFloat}
     const history::Bool # sequence history
     converged::Bool # whether optimizer has converged
     iterations::Int # number of optimizer iterations
@@ -40,11 +40,11 @@ mutable struct QuasiNewtonStats{R<:Real}
     residual_norms::Vector{Union{R,Missing}} # residual norm sequence
     status::String # exit status
 
-    function QuasiNewtonStats{R}(history::Bool) where {R<:Real}
+    function QuasiNewtonStats{R}(history::Bool) where {R<:AbstractFloat}
         return new{R}(history, false,
                         0, 0.0, 0, 0, 0,
-                        history ? R[] : [R(Inf)],
-                        history ? R[] : [R(Inf)],
+                        history ? R[] : [R(NaN)],
+                        history ? R[] : [R(NaN)],
                         history ? R[] : Union{R,Missing}[missing],
                         history ? Int[] : Union{Int,Missing}[missing],
                         history ? R[] : Union{R,Missing}[missing],
@@ -162,7 +162,7 @@ Runtimer(limit::Real=Inf) = Runtimer(time_ns(), Float64(limit))
 """
 Fast 2-norm with type conversion.
 """
-@inline function twonorm(x::AbstractVector{<:Real})
+@inline function twonorm(x)
     y = sqrt(dot(x, x))
     return (iszero(y) || !isfinite(y)) ? norm(x) : y
 end

@@ -22,7 +22,7 @@ end
 
 """
 """
-function lanczos(Z::M, ω::S, k::Int; kwargs...) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+function lanczos(Z, ω::S, k::Int; kwargs...) where {R, S<:AbstractVector{R}}
 
     m, n = size(Z)
 	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))
@@ -46,9 +46,9 @@ Scalar Lanczos process.
 - `k::Int`: Krylov subspace depth
 - `reorthogonalize::Bool`: Whether to perform partial reorthogonalization.
 """
-function lanczos(workspace::LanczosWorkspace{R}, Z::M, ω::S, k::Int;
+function lanczos(workspace::LanczosWorkspace{R}, Z, ω::S, k::Int;
                     reorthogonalize::Bool=false, timer::Runtimer=Runtimer()
-    ) where {R, S<:AbstractVector{R}, M<:AbstractMatrix{R}}
+    ) where {R, S<:AbstractVector{R}}
 
 	m, n = size(Z)
 	m == n || throw(DimensionMismatch("Lanczos requires a square operator"))

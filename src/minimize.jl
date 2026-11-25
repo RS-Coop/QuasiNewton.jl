@@ -49,6 +49,9 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     converged = false
     iterations = 0
 
+    # Reset objective
+    reset!(obj, x)
+
     # Initial stats
     update_f!(stats, obj.fval)
     update_g!(stats, obj.g_norm)
@@ -65,7 +68,7 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     end
 
     # Run setup
-    setup!(opt, x, obj, stats)
+    setup!(opt, x, obj)
 
     # Iterate
     while !converged && iterations ≤ max_iter
@@ -117,9 +120,9 @@ function minimize!(opt::Opt, x::S, obj::Objective;
     stats.converged = converged
     stats.iterations = iterations
     stats.runtime = elapsed(timer)
-    stats.f_evals += iterations + 1
-    stats.g_evals += iterations + 1
-    stats.hvp_evals = obj.H.nprod
+    stats.function_evals = obj.f_evals
+    stats.gradient_evals = obj.g_evals
+    stats.hessian_evals = obj.H_evals
 
     return stats
 end

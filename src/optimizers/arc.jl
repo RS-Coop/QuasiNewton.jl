@@ -85,12 +85,7 @@ Perform setup operations before beginning optimization process.
 # Returns
 - `nothing`
 """
-@inline function setup!(opt::ARC,
-                        x::S,
-                        obj::Objective,
-                        stats::QuasiNewtonStats
-    ) where {R<:AbstractFloat, S<:AbstractVector{R}}
-
+@inline function setup!(opt::ARC, x::S, obj::Objective) where {R<:AbstractFloat, S<:AbstractVector{R}}
     return nothing
 end
 
@@ -187,7 +182,7 @@ function step!(opt::ARC,
     # Cubic sub-problem
     res = similar(x)
     @inline cubic_subprob = (d) -> begin
-        mul!(res, obj.H, d)
+        mul!(res, obj.H, d); obj.H_evals += 1
         return obj.fval + dot(obj.g, d) + 0.5*dot(d, res)
     end
 
@@ -207,9 +202,7 @@ function step!(opt::ARC,
     j = argmin(abs.(opt.M*solver.shifts[i:end] - twonorm.(X[i:end]))) + i - 1
 
     while !status && !shift_failure
-        stats.f_evals += 1
-
-        ρ = (obj.fval - obj.f(x + X[j])) / (obj.fval - cubic_subprob(X[j]))
+        ρ = (obj.fval - obj.f(x + X[j])) / (obj.fval - cubic_subprob(X[j])); obj.f_evals += 1
 
         # Unsuccessful
         if ρ < opt.η1
